@@ -1,0 +1,191 @@
+You are an AI builder that generates fully functional, user-ready front-end interfaces for MVP products.
+Build a complete UI for my product using the information below. The design must follow my brand, use intuitive navigation, and generate all screens in one build.
+Context:
+Product Name:Recruit AI
+Product Description: A B2B SAAS App that is used by HRs /Founders of small to medium size firms- to leverage agentic flow by screening resumes and and scheduling interviews. Completely automating the entire flow from comparing JDs and CVs to providing ai scores analysis and recommended actions to scheduling interviews and sending email updates solving ghosting issues for the candidates.
+
+
+Primary User Persona: Primary users ( Sarah Williams, 34 Role: HR Manager & Operations Lead Company GrowthTech Solutions (Mumbai-based SaaS startup, 38 employees) are overworked founders and lean HR managers in 20–50 person SMBs who juggle hiring with multiple other responsibilities and are stuck with slow, manual or overcomplicated tools. 
+
+
+Core Problem Solved: timely resume screening, analysis,schedulinginterview  and updating candidates
+Brand Tone: [e.g.,agentic, innovative, Calm, Supportive, Empowering]
+
+
+Color Palette: [e.g., White base, light maroon accents, minimal icons]
+
+
+Font Style: [e.g., Inter Sans, modern rounded UI]
+
+
+UI Style: [e.g., Clean card layout, rounded corners, gentle shadows, accessible contrast, aesthetic, liquid glass designs ]
+
+
+
+🖥️ 1️⃣ Front-End Screens to Generate
+Please generate all the following screens in one go (each connected in a logical flow):
+Login / Signup Page (one click CTA)
+
+
+Dashboard (name of the company HR belongs to, below is the portal containing all job openings along with their JDs)
+
+
+Selected job role screen- pop up to start screening all resumes for ai analysis
+
+
+Ai analysis dashboard- with the list of candidates against their- resume scores, rationale & recommended action- call for interview, on-hold, reject.
+Schedule interview page- sending mails & whatsapp message to candidates passing the score threshold.
+Schedule pre-screen page- sending HR call update
+Send consolidatry emails screen to rejected candidate
+
+
+Dashboard like excel sheet containing real-time dynamic list of candidates info and staus
+Settings / Profile Page
+
+
+For each screen:
+Follow brand tone and style above.
+
+
+Include consistent header, navigation bar, and back button.
+
+
+Add clear CTAs (e.g., “start screening ,” “upload Job Description,” “schedule intervew”, “send emails” etc).
+
+
+Ensure visual hierarchy: 1 key action per screen.
+
+
+
+🎨 2️⃣ Design Style and Layout Instructions
+Layout: Responsive web + mobile-friendly dashboard view.
+
+
+Navigation: Side or top nav bar linking to Dashboards, and Settings.
+
+
+Design Style: Modern minimal with rounded corners, whitespace, and soft shadows, liquid glass feels
+
+
+Primary Color:White base, light maroon accents, minimal icons
+
+
+Secondary Color: [Supporting tone, e.g., pastel gray or emerald]
+
+
+Button Style: Rounded rectangles with hover transitions.
+
+
+Iconography: Clean, flat icons (Lucide or Material).
+
+
+Typography: Inter Sans, modern rounded UI — consistent size hierarchy (H1, H2, paragraph).
+
+
+Alignment: All text left-aligned, primary CTA right-aligned.
+
+
+
+🔄 3️⃣ Flow & Navigation Logic
+User starts on Login → lands on job portal page
+
+
+From job portal
+
+
+“Start scrrening” → ai analysis screen
+
+
+“View Details” → complete details of candidates
+
+
+“Schedule interview” → send emails &whatsapp  → Confirmation
+
+
+Settings accessible from top-right nav.
+
+
+After Confirmation → back to Dashboard automatically.
+
+
+Add smooth transitions between screens (fade or slide).
+
+
+
+🧱 4️⃣ Required Functionality (Front-End Logic Only)
+Buttons & Inputs: Should be interactive (even if dummy).
+
+
+Dashboard Cards: Show sample data placeholders (e.g., “3 Passed,” “5 on hold,” “2 rejected”).
+
+
+Interview schedule page: Editable fields — name, date, sample message
+
+
+Rejected mails page: send supportive emails to candidates
+
+
+Final dashboard- containing full list of candidates and their status
+
+
+(No backend logic yet — just front-end placeholders for next phase.)
+
+🧩 5️⃣ Text & Microcopy Guidelines
+Tone: Supportive and human.
+
+
+Examples:
+
+
+Success: “Great talent onboarding soon — kudos to team!”
+
+
+Empty state: “No job openings yet. Let’s add your first one.”
+
+
+Loading: “Fetching your data — one sec!”
+
+
+Avoid robotic phrasing like “Error 404” or “Invalid Input.”
+
+
+
+🧰 6️⃣ Accessibility & Usability
+Minimum font size: 14px
+
+
+Button color contrast: ≥ 4.5:1
+
+
+Consistent color for primary CTAs across screens
+
+
+Tab and keyboard navigation friendly
+
+
+Add descriptive alt text for icons (e.g., “Add new invoice”)
+
+
+
+🧭 7️⃣ Output Expectations
+Generate all screens in one prototype flow (no placeholders like “screen 2” without UI).
+
+
+Include header navigation for flow testing.
+
+
+
+
+Apply all brand styles consistently across screens.
+
+
+Label sections clearly (e.g., “Dashboard,” “Invoice Page”).
+
+
+Ensure output preview shows interactive transitions (if Lovable supports it).
+
+
+
+End your response with:
+💡 Key takeaway: the end user to feel in control and empowered with this new age tool that has automated all his job.
+(Ensure the output is complete, buildable, and executable in one go — no user follow-up required.)
