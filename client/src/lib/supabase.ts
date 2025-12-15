@@ -22,20 +22,79 @@ export interface SupabaseCandidate {
   email: string
 }
 
+// Test Supabase connection
+export async function testSupabaseConnection() {
+  try {
+    console.log('Testing Supabase connection...')
+    
+    // First test: simple count
+    const { count, error: countError } = await supabase
+      .from('candidates')
+      .select('*', { count: 'exact', head: true })
+
+    console.log('Count query result:', { count, countError })
+
+    if (countError) {
+      console.error('Count query failed:', countError)
+      return { success: false, error: countError.message }
+    }
+
+    // Second test: try to fetch one row
+    const { data: oneRow, error: fetchError } = await supabase
+      .from('candidates')
+      .select('id, name, email')
+      .limit(1)
+
+    console.log('Fetch one row result:', { oneRow, fetchError })
+
+    if (fetchError) {
+      console.error('Fetch query failed:', fetchError)
+      return { success: false, error: fetchError.message }
+    }
+
+    console.log('Supabase connection test successful')
+    return { 
+      success: true, 
+      count: count || 0,
+      sampleData: oneRow 
+    }
+  } catch (error) {
+    console.error('Supabase connection test error:', error)
+    return { success: false, error: String(error) }
+  }
+}
+
 // Function to fetch candidates from Supabase
 export async function fetchCandidatesFromSupabase(): Promise<SupabaseCandidate[]> {
   try {
-    const { data, error } = await supabase
+    console.log('Starting to fetch candidates from Supabase...')
+    console.log('Supabase URL:', supabaseUrl)
+    console.log('Using anon key:', supabaseAnonKey.substring(0, 20) + '...')
+    
+    const { data, error, status, statusText } = await supabase
       .from('candidates')
       .select('*')
       .order('created_at', { ascending: false })
 
+    console.log('Supabase response status:', status, statusText)
+    console.log('Supabase response data:', data)
+    console.log('Supabase response error:', error)
+
     if (error) {
-      console.error('Supabase error:', error)
-      throw new Error(`Failed to fetch candidates: ${error.message}`)
+      console.error('Supabase error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      throw new Error(`Failed to fetch candidates: ${error.message} (Code: ${error.code})`)
     }
 
-    console.log('Fetched candidates from Supabase:', data?.length || 0)
+    console.log('Successfully fetched candidates:', data?.length || 0)
+    if (data && data.length > 0) {
+      console.log('First candidate:', data[0])
+    }
+    
     return data || []
   } catch (error) {
     console.error('Error fetching candidates:', error)

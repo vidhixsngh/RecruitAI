@@ -46,7 +46,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Candidate, Job } from "@shared/schema";
 import { motion } from "framer-motion";
-import { fetchCandidatesFromSupabase, type SupabaseCandidate } from "@/lib/supabase";
+import { fetchCandidatesFromSupabase, testSupabaseConnection, type SupabaseCandidate } from "@/lib/supabase";
 
 const statusConfig = {
   pending: { label: "Pending", color: "text-muted-foreground", bg: "bg-muted" },
@@ -74,14 +74,22 @@ const recommendationConfig = {
 export default function CandidatesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [sortField, setSortField] = useState<string>("appliedDate");
+  const [sortField, setSortField] = useState<string>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   // Fetch candidates from Supabase
-  const { data: supabaseCandidates, isLoading: candidatesLoading } = useQuery<SupabaseCandidate[]>({
+  const { data: supabaseCandidates, isLoading: candidatesLoading, error: candidatesError } = useQuery<SupabaseCandidate[]>({
     queryKey: ["supabase-candidates"],
     queryFn: fetchCandidatesFromSupabase,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 30000, // 30 seconds
   });
+
+  // Debug logging (initial)
+  console.log('Candidates loading:', candidatesLoading);
+  console.log('Candidates data:', supabaseCandidates);
+  console.log('Candidates error:', candidatesError);
 
   // Comment out the old API call - we're now using Supabase
   // const { data: candidates, isLoading: candidatesLoading } = useQuery<Candidate[]>({
@@ -102,6 +110,19 @@ export default function CandidatesPage() {
         candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         candidate.email.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === "all" || candidate.stage === statusFilter;
+      
+      // Debug logging for filtering
+      if (supabaseCandidates.length > 0 && supabaseCandidates.indexOf(candidate) === 0) {
+        console.log('Filter debug - first candidate:', {
+          name: candidate.name,
+          stage: candidate.stage,
+          statusFilter,
+          matchesSearch,
+          matchesStatus,
+          searchQuery
+        });
+      }
+      
       return matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
@@ -132,6 +153,13 @@ export default function CandidatesPage() {
       }
       return aVal < bVal ? 1 : -1;
     });
+
+  // Debug logging (after filteredCandidates is defined)
+  console.log('Filtered candidates:', filteredCandidates);
+  console.log('Filtered candidates length:', filteredCandidates?.length);
+  console.log('Filtered candidates type:', typeof filteredCandidates);
+  console.log('Is array?', Array.isArray(filteredCandidates));
+  console.log('Condition check:', filteredCandidates && filteredCandidates.length > 0);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -186,11 +214,43 @@ export default function CandidatesPage() {
           <p className="text-muted-foreground mt-1">
             Real-time tracking of all candidate applications and statuses
           </p>
+          {/* Debug Info */}
+          <div className="mt-2 p-2 bg-gray-100 rounded text-xs">
+            <strong>Debug:</strong> Loading: {candidatesLoading ? 'Yes' : 'No'} | 
+            Raw Data: {supabaseCandidates?.length || 0} | 
+            Filtered: {filteredCandidates?.length || 0} | 
+            Error: {candidatesError ? 'Yes' : 'No'}
+          </div>
         </div>
-        <Button variant="outline" className="gap-2" onClick={handleExport} data-testid="button-export">
-          <Download className="h-4 w-4" />
-          Export CSV
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2" 
+            onClick={async () => {
+              try {
+                const connectionTest = await testSupabaseConnection();
+                console.log('Connection test:', connectionTest);
+                
+                if (connectionTest.success) {
+                  const result = await fetchCandidatesFromSupabase();
+                  console.log('Test fetch result:', result);
+                  alert(`✅ Supabase connected! Fetched ${result.length} candidates`);
+                } else {
+                  alert(`❌ Connection failed: ${connectionTest.error}`);
+                }
+              } catch (error) {
+                console.error('Test error:', error);
+                alert(`❌ Error: ${error}`);
+              }
+            }}
+          >
+            Test Supabase
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={handleExport} data-testid="button-export">
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
       </motion.div>
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
@@ -233,6 +293,7 @@ export default function CandidatesPage() {
           <CardContent className="p-0">
             {candidatesLoading ? (
               <div className="p-6 space-y-4">
+                <p className="text-center text-muted-foreground">Loading candidates from Supabase...</p>
                 {Array.from({ length: 8 }).map((_, i) => (
                   <div key={i} className="flex items-center gap-4">
                     <Skeleton className="h-10 w-10 rounded-full" />
@@ -244,8 +305,29 @@ export default function CandidatesPage() {
                   </div>
                 ))}
               </div>
+            ) : candidatesError ? (
+              <div className="text-center py-12">
+                <XCircle className="h-12 w-12 mx-auto text-red-500 mb-4" />
+                <h3 className="text-lg font-semibold mb-2 text-red-600">Error Loading Candidates</h3>
+                <p className="text-muted-foreground mb-4">
+                  {candidatesError.message || 'Failed to fetch candidates from Supabase'}
+                </p>
+                <Button 
+                  onClick={() => window.location.reload()} 
+                  variant="outline"
+                >
+                  Retry
+                </Button>
+              </div>
             ) : filteredCandidates && filteredCandidates.length > 0 ? (
-              <div className="overflow-x-auto">
+              <div>
+                {/* Temporary debug info */}
+                <div className="p-4 bg-green-100 mb-4 text-sm">
+                  <strong>Rendering Table:</strong> Found {filteredCandidates.length} candidates to display
+                  <br />
+                  <strong>First candidate:</strong> {filteredCandidates[0]?.name || 'No name'}
+                </div>
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -377,6 +459,7 @@ export default function CandidatesPage() {
                     })}
                   </TableBody>
                 </Table>
+                </div>
               </div>
             ) : (
               <div className="text-center py-12">
