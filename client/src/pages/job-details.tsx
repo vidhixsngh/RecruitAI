@@ -8,21 +8,55 @@ import {
   Users,
   FileText,
   Bot,
+  Copy,
+  Check,
+  ExternalLink,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import type { Job } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
+import { fetchJobByIdFromSupabase, type SupabaseJob } from "@/lib/supabase";
 import { motion } from "framer-motion";
+import { useState } from "react";
 
 export default function JobDetailsPage() {
   const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
+  const [linkCopied, setLinkCopied] = useState(false);
 
-  const { data: job, isLoading } = useQuery<Job>({
-    queryKey: ["/api/jobs", id],
+  const { data: job, isLoading } = useQuery<SupabaseJob | null>({
+    queryKey: ["job", id],
+    queryFn: () => fetchJobByIdFromSupabase(id!),
+    enabled: !!id,
   });
+
+  const getPublicApplicationLink = (jobId: string) => {
+    return `${window.location.origin}/apply/${jobId}`;
+  };
+
+  const copyLinkToClipboard = async () => {
+    if (job) {
+      const link = getPublicApplicationLink(job.id);
+      try {
+        await navigator.clipboard.writeText(link);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+        toast({
+          title: "Link copied!",
+          description: "The application link has been copied to your clipboard.",
+        });
+      } catch (error) {
+        toast({
+          title: "Failed to copy",
+          description: "Please copy the link manually.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
 
   if (isLoading) {
     return (
@@ -96,12 +130,28 @@ export default function JobDetailsPage() {
                   </CardDescription>
                 </div>
               </div>
-              <Link href={`/analysis?job=${job.id}`}>
-                <Button className="gap-2" data-testid="button-view-candidates">
-                  <Bot className="h-4 w-4" />
-                  View Candidates
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={copyLinkToClipboard}
+                >
+                  {linkCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {linkCopied ? "Copied!" : "Copy Application Link"}
                 </Button>
-              </Link>
+                <Link href={`/apply/${job.id}`} target="_blank">
+                  <Button variant="outline" className="gap-2">
+                    <ExternalLink className="h-4 w-4" />
+                    Preview Application Page
+                  </Button>
+                </Link>
+                <Link href={`/analysis?job=${job.id}`}>
+                  <Button className="gap-2" data-testid="button-view-candidates">
+                    <Bot className="h-4 w-4" />
+                    View Candidates
+                  </Button>
+                </Link>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -111,12 +161,37 @@ export default function JobDetailsPage() {
                 <span>{job.location || "Remote"}</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
-                <Users className="h-4 w-4" />
-                <span>{job.applicantsCount} applicants</span>
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="h-4 w-4" />
                 <span>{job.type}</span>
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Briefcase className="h-4 w-4" />
+                <span>Created: {new Date(job.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Public Application Link Section */}
+            <div className="p-4 bg-muted/30 rounded-lg">
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <ExternalLink className="h-4 w-4" />
+                Public Application Link
+              </h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Share this link with candidates to receive applications directly to your ATS.
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-sm bg-background px-3 py-2 rounded border">
+                  {getPublicApplicationLink(job.id)}
+                </code>
+                <Button
+                  variant="outline"
+                  onClick={copyLinkToClipboard}
+                  className={linkCopied ? "text-green-600" : ""}
+                >
+                  {linkCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
               </div>
             </div>
 
@@ -128,7 +203,7 @@ export default function JobDetailsPage() {
                 Job Description
               </h3>
               <p className="text-muted-foreground whitespace-pre-wrap" data-testid="text-job-description">
-                {job.description}
+                {job.description_text}
               </p>
             </div>
 

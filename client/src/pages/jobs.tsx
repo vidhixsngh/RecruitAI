@@ -13,6 +13,8 @@ import {
   FileText,
   Trash2,
   Eye,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,48 +47,59 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Job, InsertJob } from "@shared/schema";
 import { motion } from "framer-motion";
+import { createJobInSupabase, fetchJobsFromSupabase, type SupabaseJob, type InsertJob as SupabaseInsertJob } from "@/lib/supabase";
+
 
 export default function JobsPage() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isScreeningDialogOpen, setIsScreeningDialogOpen] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [newJob, setNewJob] = useState<Partial<InsertJob>>({
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<SupabaseJob | null>(null);
+  const [createdJob, setCreatedJob] = useState<SupabaseJob | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [copiedJobId, setCopiedJobId] = useState<string | null>(null);
+  const [newJob, setNewJob] = useState<Partial<SupabaseInsertJob>>({
     title: "",
     department: "",
-    description: "",
+    description_text: "",
     requirements: "",
     location: "",
     type: "full-time",
     status: "active",
   });
 
-  const { data: jobs, isLoading } = useQuery<Job[]>({
-    queryKey: ["/api/jobs"],
+  const { data: jobs, isLoading } = useQuery<SupabaseJob[]>({
+    queryKey: ["supabase-jobs"],
+    queryFn: fetchJobsFromSupabase,
   });
 
   const createJobMutation = useMutation({
-    mutationFn: async (job: Partial<InsertJob>) => {
-      return apiRequest("POST", "/api/jobs", job);
+    mutationFn: async (job: SupabaseInsertJob) => {
+      return createJobInSupabase(job);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+    onSuccess: (createdJobData) => {
+      queryClient.invalidateQueries({ queryKey: ["supabase-jobs"] });
       setIsAddDialogOpen(false);
+      setCreatedJob(createdJobData);
+      setIsSuccessModalOpen(true);
       setNewJob({
         title: "",
         department: "",
-        description: "",
+        description_text: "",
         requirements: "",
         location: "",
         type: "full-time",
         status: "active",
       });
+    },
+    onError: (error) => {
       toast({
-        title: "Job created!",
-        description: "Your new job opening has been added.",
+        title: "Error creating job",
+        description: error.message,
+        variant: "destructive",
       });
     },
   });
@@ -126,7 +139,7 @@ export default function JobsPage() {
   );
 
   const handleCreateJob = () => {
-    if (!newJob.title || !newJob.department || !newJob.description) {
+    if (!newJob.title || !newJob.department || !newJob.description_text) {
       toast({
         title: "Missing fields",
         description: "Please fill in all required fields.",
@@ -134,7 +147,32 @@ export default function JobsPage() {
       });
       return;
     }
-    createJobMutation.mutate(newJob);
+    createJobMutation.mutate(newJob as SupabaseInsertJob);
+  };
+
+  const getPublicApplicationLink = (jobId: string) => {
+    return `${window.location.origin}/apply/${jobId}`;
+  };
+
+  const copyLinkToClipboard = async () => {
+    if (createdJob) {
+      const link = getPublicApplicationLink(createdJob.id);
+      try {
+        await navigator.clipboard.writeText(link);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+        toast({
+          title: "Link copied!",
+          description: "The application link has been copied to your clipboard.",
+        });
+      } catch (error) {
+        toast({
+          title: "Failed to copy",
+          description: "Please copy the link manually.",
+          variant: "destructive",
+        });
+      }
+    }
   };
 
   const handleStartScreening = () => {
@@ -228,8 +266,8 @@ export default function JobsPage() {
                 <Textarea
                   id="description"
                   placeholder="Describe the role, responsibilities, and what you're looking for..."
-                  value={newJob.description}
-                  onChange={(e) => setNewJob({ ...newJob, description: e.target.value })}
+                  value={newJob.description_text}
+                  onChange={(e) => setNewJob({ ...newJob, description_text: e.target.value })}
                   className="min-h-24"
                   data-testid="input-description"
                 />
@@ -325,6 +363,27 @@ export default function JobsPage() {
                           </DropdownMenuItem>
                         </Link>
                         <DropdownMenuItem
+                          onClick={async () => {
+                            const link = getPublicApplicationLink(job.id);
+                            try {
+                              await navigator.clipboard.writeText(link);
+                              toast({
+                                title: "Application link copied!",
+                                description: "Share this link with candidates to receive applications.",
+                              });
+                            } catch (error) {
+                              toast({
+                                title: "Failed to copy",
+                                description: "Please copy the link manually.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy Application Link
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           className="text-destructive"
                           onClick={() => deleteJobMutation.mutate(job.id)}
                           data-testid={`button-delete-job-${job.id}`}
@@ -349,8 +408,61 @@ export default function JobsPage() {
                   </div>
 
                   <p className="text-sm text-muted-foreground line-clamp-2">
-                    {job.description}
+                    {job.description_text}
                   </p>
+
+                  {/* Public Application Link */}
+                  <div className="p-3 bg-muted/30 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Public Application Link</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={`h-6 px-2 text-xs ${copiedJobId === job.id ? 'text-green-600' : ''}`}
+                        onClick={async () => {
+                          const link = getPublicApplicationLink(job.id);
+                          try {
+                            await navigator.clipboard.writeText(link);
+                            setCopiedJobId(job.id);
+                            setTimeout(() => setCopiedJobId(null), 2000);
+                            toast({
+                              title: "Link copied!",
+                              description: "Application link copied to clipboard.",
+                            });
+                          } catch (error) {
+                            toast({
+                              title: "Failed to copy",
+                              description: "Please copy the link manually.",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                      >
+                        {copiedJobId === job.id ? (
+                          <>
+                            <Check className="h-3 w-3 mr-1" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3 mr-1" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-xs bg-background px-2 py-1 rounded border truncate">
+                        {getPublicApplicationLink(job.id)}
+                      </code>
+                      <Link href={`/apply/${job.id}`} target="_blank">
+                        <Button variant="outline" size="sm" className="h-6 px-2 text-xs">
+                          <Eye className="h-3 w-3 mr-1" />
+                          Preview
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
 
                   <div className="flex gap-2">
                     <Button
@@ -459,6 +571,68 @@ export default function JobsPage() {
                 </>
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Success Modal with Public Application Link */}
+      <Dialog open={isSuccessModalOpen} onOpenChange={setIsSuccessModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <Check className="h-5 w-5" />
+              Job Created Successfully!
+            </DialogTitle>
+            <DialogDescription>
+              Your job opening has been created and is now live. Share the application link below to start receiving applications.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-4 rounded-lg bg-muted/30 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <Briefcase className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-medium">{createdJob?.title}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {createdJob?.department} • {createdJob?.type}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Public Application Link</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={createdJob ? getPublicApplicationLink(createdJob.id) : ''}
+                  readOnly
+                  className="font-mono text-sm"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={copyLinkToClipboard}
+                  className={linkCopied ? "text-green-600" : ""}
+                >
+                  {linkCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Share this link with candidates to receive applications directly to your ATS.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSuccessModalOpen(false)}>
+              Close
+            </Button>
+            <Link href={createdJob ? `/apply/${createdJob.id}` : '#'}>
+              <Button>
+                Preview Application Page
+              </Button>
+            </Link>
           </DialogFooter>
         </DialogContent>
       </Dialog>

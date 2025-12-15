@@ -19,6 +19,7 @@ import PrescreenPage from "@/pages/prescreen";
 import EmailsPage from "@/pages/emails";
 import CandidatesPage from "@/pages/candidates";
 import SettingsPage from "@/pages/settings";
+import ApplyPage from "@/pages/apply";
 import { AnimatePresence, motion } from "framer-motion";
 
 function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
@@ -80,6 +81,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={LoginPage} />
+      <Route path="/apply/:jobId" component={ApplyPage} />
       <Route path="/dashboard">
         <AppLayout>
           <ProtectedRoute component={DashboardPage} />

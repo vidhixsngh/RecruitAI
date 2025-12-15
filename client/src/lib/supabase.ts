@@ -64,6 +64,25 @@ export async function testSupabaseConnection() {
   }
 }
 
+// Test jobs table connection
+export async function testJobsTable() {
+  try {
+    const { count, error } = await supabase
+      .from('jobs')
+      .select('*', { count: 'exact', head: true })
+
+    if (error) {
+      console.error('Jobs table test failed:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, count: count || 0 }
+  } catch (error) {
+    console.error('Jobs table test error:', error)
+    return { success: false, error: String(error) }
+  }
+}
+
 // Function to fetch candidates from Supabase
 export async function fetchCandidatesFromSupabase(): Promise<SupabaseCandidate[]> {
   try {
@@ -98,6 +117,98 @@ export async function fetchCandidatesFromSupabase(): Promise<SupabaseCandidate[]
     return data || []
   } catch (error) {
     console.error('Error fetching candidates:', error)
+    throw error
+  }
+}
+
+// Job-related types and functions
+export interface SupabaseJob {
+  id: string
+  created_at: string
+  title: string
+  description_text: string
+  department: string
+  requirements: string | null
+  location: string | null
+  type: string
+  status: string
+}
+
+export interface InsertJob {
+  title: string
+  description_text: string
+  department: string
+  requirements?: string
+  location?: string
+  type: string
+  status: string
+}
+
+// Function to create a job in Supabase
+export async function createJobInSupabase(job: InsertJob): Promise<SupabaseJob> {
+  try {
+    console.log('Creating job in Supabase:', job)
+    
+    const { data, error } = await supabase
+      .from('jobs')
+      .insert([job])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Supabase job creation error:', error)
+      throw new Error(`Failed to create job: ${error.message}`)
+    }
+
+    console.log('Successfully created job:', data)
+    return data
+  } catch (error) {
+    console.error('Error creating job:', error)
+    throw error
+  }
+}
+
+// Function to fetch jobs from Supabase
+export async function fetchJobsFromSupabase(): Promise<SupabaseJob[]> {
+  try {
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Supabase jobs fetch error:', error)
+      throw new Error(`Failed to fetch jobs: ${error.message}`)
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error fetching jobs:', error)
+    throw error
+  }
+}
+
+// Function to fetch a single job by ID
+export async function fetchJobByIdFromSupabase(jobId: string): Promise<SupabaseJob | null> {
+  try {
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('*')
+      .eq('id', jobId)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No rows returned
+        return null
+      }
+      console.error('Supabase job fetch error:', error)
+      throw new Error(`Failed to fetch job: ${error.message}`)
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error fetching job:', error)
     throw error
   }
 }

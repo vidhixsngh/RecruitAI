@@ -2,6 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertJobSchema, insertCandidateSchema, insertInterviewSchema } from "@shared/schema";
+import multer from "multer";
+import FormData from "form-data";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -256,6 +258,71 @@ export async function registerRoutes(
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch email templates" });
     }
+  });
+
+  // Setup multer for handling multipart form data
+  const upload = multer();
+
+  // Proxy endpoint for n8n webhook to avoid CORS issues
+  app.post("/webhook/submit-application", upload.single('resume'), async (req, res) => {
+    try {
+      console.log('Proxying application submission to n8n...');
+      console.log('Form fields:', req.body);
+      console.log('File info:', req.file ? { 
+        fieldname: req.file.fieldname,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size 
+      } : 'No file');
+      
+      // Create new FormData for n8n webhook
+      const formData = new FormData();
+      
+      // Add all form fields
+      Object.keys(req.body).forEach(key => {
+        formData.append(key, req.body[key]);
+      });
+      
+      // Add the file if it exists
+      if (req.file) {
+        formData.append('resume', req.file.buffer, {
+          filename: req.file.originalname,
+          contentType: req.file.mimetype,
+        });
+      }
+
+      const fetch = (await import('node-fetch')).default;
+      
+      console.log('Sending to n8n webhook...');
+      const response = await fetch('https://vidhiii.app.n8n.cloud/webhook-test/upload-resume', {
+        method: 'POST',
+        body: formData,
+        headers: formData.getHeaders(),
+      });
+
+      const responseText = await response.text();
+      console.log('n8n response status:', response.status);
+      console.log('n8n response:', responseText);
+      
+      if (!response.ok) {
+        console.error('n8n webhook error:', response.status, responseText);
+        return res.status(response.status).json({ 
+          error: `n8n webhook failed: ${responseText}` 
+        });
+      }
+
+      console.log('n8n webhook success!');
+      res.json({ success: true, message: 'Application submitted successfully', response: responseText });
+      
+    } catch (error) {
+      console.error('Proxy error:', error);
+      res.status(500).json({ error: 'Failed to submit application', details: error.message });
+    }
+  });
+
+  // Test endpoint to verify proxy is working
+  app.get("/webhook/test-proxy", (req, res) => {
+    res.json({ message: "Proxy endpoint is working!", timestamp: new Date().toISOString() });
   });
 
   return httpServer;

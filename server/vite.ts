@@ -29,10 +29,23 @@ export async function setupVite(server: Server, app: Express) {
     appType: "custom",
   });
 
-  app.use(vite.middlewares);
-
-  app.use("*", async (req, res, next) => {
+  // Only apply Vite middleware to non-API/webhook routes
+  app.use((req, res, next) => {
     const url = req.originalUrl;
+    if (url.startsWith('/api/') || url.startsWith('/webhook/')) {
+      return next();
+    }
+    vite.middlewares(req, res, next);
+  });
+
+  // Handle only non-API/webhook routes for Vite
+  app.get("*", async (req, res, next) => {
+    const url = req.originalUrl;
+
+    // Skip API and webhook routes - let Express handle them
+    if (url.startsWith('/api/') || url.startsWith('/webhook/')) {
+      return next();
+    }
 
     try {
       const clientTemplate = path.resolve(
