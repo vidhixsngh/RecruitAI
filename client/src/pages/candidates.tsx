@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Candidate, Job } from "@shared/schema";
 import { motion } from "framer-motion";
+import { fetchCandidatesFromSupabase, type SupabaseCandidate } from "@/lib/supabase";
 
 const statusConfig = {
   pending: { label: "Pending", color: "text-muted-foreground", bg: "bg-muted" },
@@ -54,12 +55,20 @@ const statusConfig = {
   email_sent: { label: "Email Sent", color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-950/50" },
   hired: { label: "Hired", color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/50" },
   rejected: { label: "Rejected", color: "text-rose-600", bg: "bg-rose-50 dark:bg-rose-950/50" },
+  // Add any other stage values you might have in Supabase
+  applied: { label: "Applied", color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/50" },
+  screening: { label: "Screening", color: "text-yellow-600", bg: "bg-yellow-50 dark:bg-yellow-950/50" },
+  interviewed: { label: "Interviewed", color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-950/50" },
 };
 
 const recommendationConfig = {
   interview: { label: "Interview", icon: CheckCircle, color: "text-emerald-600" },
   "on-hold": { label: "On Hold", icon: Clock, color: "text-amber-600" },
   reject: { label: "Reject", icon: XCircle, color: "text-rose-600" },
+  // Add other recommendation values from ai_recommendation
+  hire: { label: "Hire", icon: CheckCircle, color: "text-emerald-600" },
+  "strong-maybe": { label: "Strong Maybe", icon: Clock, color: "text-blue-600" },
+  "weak-maybe": { label: "Weak Maybe", icon: Clock, color: "text-amber-600" },
 };
 
 export default function CandidatesPage() {
@@ -68,9 +77,16 @@ export default function CandidatesPage() {
   const [sortField, setSortField] = useState<string>("appliedDate");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
-  const { data: candidates, isLoading: candidatesLoading } = useQuery<Candidate[]>({
-    queryKey: ["/api/candidates"],
+  // Fetch candidates from Supabase
+  const { data: supabaseCandidates, isLoading: candidatesLoading } = useQuery<SupabaseCandidate[]>({
+    queryKey: ["supabase-candidates"],
+    queryFn: fetchCandidatesFromSupabase,
   });
+
+  // Comment out the old API call - we're now using Supabase
+  // const { data: candidates, isLoading: candidatesLoading } = useQuery<Candidate[]>({
+  //   queryKey: ["/api/candidates"],
+  // });
 
   const { data: jobs } = useQuery<Job[]>({
     queryKey: ["/api/jobs"],
@@ -80,21 +96,35 @@ export default function CandidatesPage() {
     return jobs?.find((j) => j.id === jobId)?.title || "Unknown";
   };
 
-  const filteredCandidates = candidates
+  const filteredCandidates = supabaseCandidates
     ?.filter((candidate) => {
       const matchesSearch =
         candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         candidate.email.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus = statusFilter === "all" || candidate.status === statusFilter;
+      const matchesStatus = statusFilter === "all" || candidate.stage === statusFilter;
       return matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
-      let aVal: string | number = a[sortField as keyof Candidate] as string | number;
-      let bVal: string | number = b[sortField as keyof Candidate] as string | number;
+      let aVal: string | number;
+      let bVal: string | number;
       
-      if (sortField === "resumeScore") {
-        aVal = Number(aVal);
-        bVal = Number(bVal);
+      // Map sort fields to Supabase column names
+      if (sortField === "resumeScore" || sortField === "ai_score") {
+        aVal = a.ai_score;
+        bVal = b.ai_score;
+      } else if (sortField === "appliedDate" || sortField === "created_at") {
+        aVal = a.created_at;
+        bVal = b.created_at;
+      } else if (sortField === "name") {
+        aVal = a.name;
+        bVal = b.name;
+      } else {
+        aVal = a[sortField as keyof SupabaseCandidate] as string | number;
+        bVal = b[sortField as keyof SupabaseCandidate] as string | number;
+      }
+      
+      if (typeof aVal === "number" && typeof bVal === "number") {
+        return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
       }
       
       if (sortDirection === "asc") {
@@ -113,21 +143,21 @@ export default function CandidatesPage() {
   };
 
   const handleExport = () => {
-    if (!candidates) return;
+    if (!supabaseCandidates) return;
     
     const csv = [
-      ["Name", "Email", "Phone", "Position", "Score", "Recommendation", "Status", "Applied Date", "Last Updated"].join(","),
-      ...candidates.map((c) =>
+      ["Name", "Email", "Phone", "Position", "Score", "Recommendation", "Stage", "Applied Date", "Summary"].join(","),
+      ...supabaseCandidates.map((c) =>
         [
           c.name,
           c.email,
           c.phone,
-          getJobTitle(c.jobId),
-          c.resumeScore,
-          c.recommendation,
-          c.status,
-          c.appliedDate,
-          c.lastUpdated,
+          getJobTitle(c.job_id),
+          c.ai_score,
+          c.ai_recommendation,
+          c.stage,
+          new Date(c.created_at).toLocaleDateString(),
+          `"${c.ai_summary.replace(/"/g, '""')}"`, // Escape quotes in summary
         ].join(",")
       ),
     ].join("\n");
@@ -181,11 +211,12 @@ export default function CandidatesPage() {
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="all">All Stages</SelectItem>
+              <SelectItem value="applied">Applied</SelectItem>
+              <SelectItem value="screening">Screening</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="interview_scheduled">Interview Scheduled</SelectItem>
-              <SelectItem value="prescreen_scheduled">Pre-screen Scheduled</SelectItem>
-              <SelectItem value="email_sent">Email Sent</SelectItem>
+              <SelectItem value="interviewed">Interviewed</SelectItem>
               <SelectItem value="hired">Hired</SelectItem>
               <SelectItem value="rejected">Rejected</SelectItem>
             </SelectContent>
@@ -234,10 +265,10 @@ export default function CandidatesPage() {
                         <Button
                           variant="ghost"
                           className="gap-1"
-                          onClick={() => handleSort("resumeScore")}
+                          onClick={() => handleSort("ai_score")}
                           data-testid="sort-score"
                         >
-                          Score
+                          AI Score
                           <ArrowUpDown className="h-3 w-3" />
                         </Button>
                       </TableHead>
@@ -259,8 +290,8 @@ export default function CandidatesPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredCandidates.map((candidate) => {
-                      const recConfig = recommendationConfig[candidate.recommendation as keyof typeof recommendationConfig];
-                      const statConfig = statusConfig[candidate.status as keyof typeof statusConfig] || statusConfig.pending;
+                      const recConfig = recommendationConfig[candidate.ai_recommendation as keyof typeof recommendationConfig];
+                      const statConfig = statusConfig[candidate.stage as keyof typeof statusConfig] || statusConfig.pending;
                       const RecIcon = recConfig?.icon || Clock;
 
                       return (
@@ -273,27 +304,31 @@ export default function CandidatesPage() {
                                   <Mail className="h-3 w-3" />
                                   {candidate.email}
                                 </span>
+                                <span className="flex items-center gap-1">
+                                  <Phone className="h-3 w-3" />
+                                  {candidate.phone}
+                                </span>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {getJobTitle(candidate.jobId)}
+                            {getJobTitle(candidate.job_id)}
                           </TableCell>
                           <TableCell className="text-center">
                             <span className={`font-semibold ${
-                              candidate.resumeScore >= 80
+                              candidate.ai_score >= 80
                                 ? "text-emerald-600"
-                                : candidate.resumeScore >= 60
+                                : candidate.ai_score >= 60
                                 ? "text-amber-600"
                                 : "text-rose-600"
                             }`}>
-                              {candidate.resumeScore}
+                              {candidate.ai_score}
                             </span>
                           </TableCell>
                           <TableCell>
-                            <div className={`flex items-center gap-1.5 ${recConfig?.color}`}>
+                            <div className={`flex items-center gap-1.5 ${recConfig?.color || "text-muted-foreground"}`}>
                               <RecIcon className="h-4 w-4" />
-                              <span className="text-sm">{recConfig?.label}</span>
+                              <span className="text-sm">{recConfig?.label || candidate.ai_recommendation}</span>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -302,7 +337,7 @@ export default function CandidatesPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-muted-foreground text-sm">
-                            {candidate.appliedDate}
+                            {new Date(candidate.created_at).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
                             <DropdownMenu>
@@ -318,7 +353,7 @@ export default function CandidatesPage() {
                                     View Details
                                   </DropdownMenuItem>
                                 </Link>
-                                {candidate.recommendation === "interview" && (
+                                {candidate.ai_recommendation === "interview" && (
                                   <Link href={`/schedule?candidate=${candidate.id}`}>
                                     <DropdownMenuItem>
                                       <Calendar className="h-4 w-4 mr-2" />
@@ -326,7 +361,7 @@ export default function CandidatesPage() {
                                     </DropdownMenuItem>
                                   </Link>
                                 )}
-                                {candidate.recommendation === "reject" && (
+                                {candidate.ai_recommendation === "reject" && (
                                   <Link href={`/emails?candidate=${candidate.id}`}>
                                     <DropdownMenuItem>
                                       <Mail className="h-4 w-4 mr-2" />
@@ -346,9 +381,9 @@ export default function CandidatesPage() {
             ) : (
               <div className="text-center py-12">
                 <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No candidates yet</h3>
+                <h3 className="text-lg font-semibold mb-2">No applications yet</h3>
                 <p className="text-muted-foreground mb-6">
-                  Start by screening resumes for your job openings.
+                  No candidates found in your database. Start by adding candidates to your Supabase table.
                 </p>
                 <Link href="/jobs">
                   <Button className="gap-2" data-testid="button-go-to-jobs">
@@ -365,7 +400,7 @@ export default function CandidatesPage() {
       {filteredCandidates && filteredCandidates.length > 0 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>
-            Showing {filteredCandidates.length} of {candidates?.length} candidates
+            Showing {filteredCandidates.length} of {supabaseCandidates?.length} candidates
           </span>
           <span>
             Last updated: {new Date().toLocaleString()}

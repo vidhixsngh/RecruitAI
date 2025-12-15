@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   companyName: text("company_name").notNull(),
@@ -12,8 +12,8 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
 });
 
-export const jobs = pgTable("jobs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const jobs = sqliteTable("jobs", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   title: text("title").notNull(),
   department: text("department").notNull(),
   description: text("description").notNull(),
@@ -24,9 +24,9 @@ export const jobs = pgTable("jobs", {
   applicantsCount: integer("applicants_count").notNull().default(0),
 });
 
-export const candidates = pgTable("candidates", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  jobId: varchar("job_id").notNull(),
+export const candidates = sqliteTable("candidates", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  jobId: text("job_id").notNull(),
   name: text("name").notNull(),
   email: text("email").notNull(),
   phone: text("phone").notNull(),
@@ -38,10 +38,10 @@ export const candidates = pgTable("candidates", {
   lastUpdated: text("last_updated").notNull(),
 });
 
-export const interviews = pgTable("interviews", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  candidateId: varchar("candidate_id").notNull(),
-  jobId: varchar("job_id").notNull(),
+export const interviews = sqliteTable("interviews", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  candidateId: text("candidate_id").notNull(),
+  jobId: text("job_id").notNull(),
   type: text("type").notNull(),
   scheduledDate: text("scheduled_date").notNull(),
   scheduledTime: text("scheduled_time").notNull(),
@@ -50,8 +50,8 @@ export const interviews = pgTable("interviews", {
   status: text("status").notNull().default("scheduled"),
 });
 
-export const emailTemplates = pgTable("email_templates", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const emailTemplates = sqliteTable("email_templates", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
