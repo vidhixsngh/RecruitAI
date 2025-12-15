@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth-context";
-import type { Job, Candidate } from "@shared/schema";
+import { fetchCandidatesFromSupabase, fetchJobsFromSupabase, type SupabaseCandidate, type SupabaseJob } from "@/lib/supabase";
 import { motion } from "framer-motion";
 
 const statsCards = [
@@ -55,29 +55,48 @@ const statsCards = [
 export default function DashboardPage() {
   const { user } = useAuth();
 
-  const { data: jobs, isLoading: jobsLoading } = useQuery<Job[]>({
-    queryKey: ["/api/jobs"],
+  // Fetch jobs from Supabase
+  const { data: jobs, isLoading: jobsLoading } = useQuery<SupabaseJob[]>({
+    queryKey: ["supabase-jobs"],
+    queryFn: fetchJobsFromSupabase,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 60000, // 1 minute
   });
 
-  const { data: candidates, isLoading: candidatesLoading } = useQuery<Candidate[]>({
-    queryKey: ["/api/candidates"],
+  // Fetch candidates from Supabase
+  const { data: candidates, isLoading: candidatesLoading } = useQuery<SupabaseCandidate[]>({
+    queryKey: ["supabase-candidates"],
+    queryFn: fetchCandidatesFromSupabase,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 30000, // 30 seconds
   });
 
   const stats = {
     jobs: jobs?.length || 0,
     candidates: candidates?.length || 0,
-    interviews: candidates?.filter((c) => c.status === "interview_scheduled").length || 0,
-    hireRate: candidates?.length
-      ? Math.round(
-          ((candidates.filter((c) => c.recommendation === "interview").length / candidates.length) *
-            100)
-        )
-      : 0,
+    interviews: candidates?.filter((c) => c.stage === "interview_scheduled").length || 0,
+    hireRate: 85, // Keep hire rate the same for now as requested
   };
 
-  const passedCount = candidates?.filter((c) => c.recommendation === "interview").length || 0;
-  const onHoldCount = candidates?.filter((c) => c.recommendation === "on-hold").length || 0;
-  const rejectedCount = candidates?.filter((c) => c.recommendation === "reject").length || 0;
+  // Map Supabase ai_recommendation values to dashboard categories
+  const passedCount = candidates?.filter((c) => 
+    c.ai_recommendation === "interview" || 
+    c.ai_recommendation === "hire" || 
+    c.ai_recommendation === "strong-maybe"
+  ).length || 0;
+  
+  const onHoldCount = candidates?.filter((c) => 
+    c.ai_recommendation === "hold" || 
+    c.ai_recommendation === "on-hold" || 
+    c.ai_recommendation === "weak-maybe"
+  ).length || 0;
+  
+  const rejectedCount = candidates?.filter((c) => 
+    c.ai_recommendation === "reject" || 
+    c.ai_recommendation === "rejected"
+  ).length || 0;
 
   const recentJobs = jobs?.slice(0, 3) || [];
 
@@ -140,11 +159,49 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* AI Screening Circular Tab */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.4 }}
+        className="flex justify-center"
+      >
+        <div className="relative">
+          <div className="w-64 h-64 rounded-full bg-gradient-to-br from-primary/10 via-primary/20 to-primary/5 border-2 border-primary/30 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+            <div className="text-center space-y-2 p-4">
+              <div className="w-10 h-10 mx-auto rounded-full bg-primary/20 flex items-center justify-center mb-2">
+                <Bot className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-primary mb-1">Ready to Screen?</h3>
+                <p className="text-xs text-muted-foreground mb-3 leading-relaxed px-2">
+                  Let AI analyze resumes and recommend matches
+                </p>
+              </div>
+              <Link href="/jobs">
+                <Button 
+                  size="sm" 
+                  className="gap-1 px-4 py-1.5 rounded-full shadow-md hover:shadow-lg transition-all duration-300 text-xs" 
+                  data-testid="button-start-screening"
+                >
+                  Start Screening
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+          {/* Decorative elements */}
+          <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary/30 animate-pulse"></div>
+          <div className="absolute -bottom-3 -left-3 w-4 h-4 rounded-full bg-primary/20 animate-pulse delay-1000"></div>
+          <div className="absolute top-1/4 -left-4 w-3 h-3 rounded-full bg-primary/25 animate-pulse delay-500"></div>
+        </div>
+      </motion.div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.4 }}
+          transition={{ duration: 0.3, delay: 0.5 }}
           className="lg:col-span-2"
         >
           <Card>
@@ -185,11 +242,11 @@ export default function DashboardPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{job.title}</p>
                         <p className="text-sm text-muted-foreground truncate">
-                          {job.department} • {job.location}
+                          {job.department || "General"} • {job.location || "Remote"}
                         </p>
                       </div>
                       <Badge variant="secondary">
-                        {job.applicantsCount} applicant{job.applicantsCount !== 1 ? "s" : ""}
+                        {candidates?.filter(c => c.job_id === job.id).length || 0} applicant{(candidates?.filter(c => c.job_id === job.id).length || 0) !== 1 ? "s" : ""}
                       </Badge>
                     </div>
                   </Link>
@@ -214,7 +271,7 @@ export default function DashboardPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.5 }}
+          transition={{ duration: 0.3, delay: 0.6 }}
         >
           <Card>
             <CardHeader className="pb-4">
@@ -290,35 +347,7 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.6 }}
-      >
-        <Card className="bg-gradient-to-br from-primary/5 via-primary/10 to-background border-primary/20">
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-primary/10">
-                  <Bot className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Ready to screen candidates?</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Let AI analyze resumes and recommend the best matches for your roles.
-                  </p>
-                </div>
-              </div>
-              <Link href="/jobs">
-                <Button className="gap-2" data-testid="button-start-screening">
-                  Start Screening
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+
     </div>
   );
 }

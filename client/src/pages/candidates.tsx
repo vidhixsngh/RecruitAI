@@ -16,11 +16,9 @@ import {
   MoreVertical,
   Eye,
   Bot,
-  ArrowRight,
 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -44,7 +42,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Candidate, Job } from "@shared/schema";
+import type { Job } from "@shared/schema";
 import { motion } from "framer-motion";
 import { fetchCandidatesFromSupabase, testSupabaseConnection, type SupabaseCandidate } from "@/lib/supabase";
 
@@ -62,13 +60,70 @@ const statusConfig = {
 };
 
 const recommendationConfig = {
-  interview: { label: "Interview", icon: CheckCircle, color: "text-emerald-600" },
-  "on-hold": { label: "On Hold", icon: Clock, color: "text-amber-600" },
-  reject: { label: "Reject", icon: XCircle, color: "text-rose-600" },
-  // Add other recommendation values from ai_recommendation
-  hire: { label: "Hire", icon: CheckCircle, color: "text-emerald-600" },
-  "strong-maybe": { label: "Strong Maybe", icon: Clock, color: "text-blue-600" },
-  "weak-maybe": { label: "Weak Maybe", icon: Clock, color: "text-amber-600" },
+  interview: { 
+    label: "Suggest Interview", 
+    icon: CheckCircle, 
+    color: "text-emerald-600",
+    dotColor: "bg-emerald-500",
+    buttonLabel: "Interview",
+    buttonColor: "bg-emerald-600 hover:bg-emerald-700 text-white"
+  },
+  "on-hold": { 
+    label: "Suggest Hold", 
+    icon: Clock, 
+    color: "text-amber-600",
+    dotColor: "bg-amber-500",
+    buttonLabel: "Hold",
+    buttonColor: "bg-amber-600 hover:bg-amber-700 text-white"
+  },
+  reject: { 
+    label: "Suggest Reject", 
+    icon: XCircle, 
+    color: "text-rose-600",
+    dotColor: "bg-rose-500",
+    buttonLabel: "Reject",
+    buttonColor: "bg-rose-600 hover:bg-rose-700 text-white"
+  },
+  rejected: { 
+    label: "Suggest Reject", 
+    icon: XCircle, 
+    color: "text-rose-600",
+    dotColor: "bg-rose-500",
+    buttonLabel: "Reject",
+    buttonColor: "bg-rose-600 hover:bg-rose-700 text-white"
+  },
+  hire: { 
+    label: "Suggest Interview", 
+    icon: CheckCircle, 
+    color: "text-emerald-600",
+    dotColor: "bg-emerald-500",
+    buttonLabel: "Interview",
+    buttonColor: "bg-emerald-600 hover:bg-emerald-700 text-white"
+  },
+  hold: { 
+    label: "Suggest Hold", 
+    icon: Clock, 
+    color: "text-amber-600",
+    dotColor: "bg-amber-500",
+    buttonLabel: "Hold",
+    buttonColor: "bg-amber-600 hover:bg-amber-700 text-white"
+  },
+  "strong-maybe": { 
+    label: "Suggest Interview", 
+    icon: CheckCircle, 
+    color: "text-emerald-600",
+    dotColor: "bg-emerald-500",
+    buttonLabel: "Interview",
+    buttonColor: "bg-emerald-600 hover:bg-emerald-700 text-white"
+  },
+  "weak-maybe": { 
+    label: "Suggest Hold", 
+    icon: Clock, 
+    color: "text-amber-600",
+    dotColor: "bg-amber-500",
+    buttonLabel: "Hold",
+    buttonColor: "bg-amber-600 hover:bg-amber-700 text-white"
+  },
 };
 
 export default function CandidatesPage() {
@@ -86,22 +141,27 @@ export default function CandidatesPage() {
     staleTime: 30000, // 30 seconds
   });
 
-  // Debug logging (initial)
-  console.log('Candidates loading:', candidatesLoading);
-  console.log('Candidates data:', supabaseCandidates);
-  console.log('Candidates error:', candidatesError);
+
 
   // Comment out the old API call - we're now using Supabase
   // const { data: candidates, isLoading: candidatesLoading } = useQuery<Candidate[]>({
   //   queryKey: ["/api/candidates"],
   // });
 
-  const { data: jobs } = useQuery<Job[]>({
-    queryKey: ["/api/jobs"],
+  // Fetch jobs from Supabase
+  const { data: jobs } = useQuery({
+    queryKey: ["supabase-jobs"],
+    queryFn: async () => {
+      const { fetchJobsFromSupabase } = await import("@/lib/supabase");
+      return fetchJobsFromSupabase();
+    },
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 60000, // 1 minute
   });
 
   const getJobTitle = (jobId: string) => {
-    return jobs?.find((j) => j.id === jobId)?.title || "Unknown";
+    return jobs?.find((j) => j.id === jobId)?.title || "Unknown Position";
   };
 
   const filteredCandidates = supabaseCandidates
@@ -110,18 +170,6 @@ export default function CandidatesPage() {
         candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         candidate.email.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === "all" || candidate.stage === statusFilter;
-      
-      // Debug logging for filtering
-      if (supabaseCandidates.length > 0 && supabaseCandidates.indexOf(candidate) === 0) {
-        console.log('Filter debug - first candidate:', {
-          name: candidate.name,
-          stage: candidate.stage,
-          statusFilter,
-          matchesSearch,
-          matchesStatus,
-          searchQuery
-        });
-      }
       
       return matchesSearch && matchesStatus;
     })
@@ -154,12 +202,7 @@ export default function CandidatesPage() {
       return aVal < bVal ? 1 : -1;
     });
 
-  // Debug logging (after filteredCandidates is defined)
-  console.log('Filtered candidates:', filteredCandidates);
-  console.log('Filtered candidates length:', filteredCandidates?.length);
-  console.log('Filtered candidates type:', typeof filteredCandidates);
-  console.log('Is array?', Array.isArray(filteredCandidates));
-  console.log('Condition check:', filteredCandidates && filteredCandidates.length > 0);
+
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -198,6 +241,15 @@ export default function CandidatesPage() {
     a.click();
   };
 
+  const handleCandidateAction = (action: string, candidateId: string, candidateName: string) => {
+    console.log('Decision made:', action, candidateId, candidateName);
+  };
+
+  const openCandidateDetails = (candidateId: string) => {
+    console.log('Opening candidate details for:', candidateId);
+    // TODO: Implement modal or navigation to candidate details
+  };
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <motion.div
@@ -214,13 +266,7 @@ export default function CandidatesPage() {
           <p className="text-muted-foreground mt-1">
             Real-time tracking of all candidate applications and statuses
           </p>
-          {/* Debug Info */}
-          <div className="mt-2 p-2 bg-gray-100 rounded text-xs">
-            <strong>Debug:</strong> Loading: {candidatesLoading ? 'Yes' : 'No'} | 
-            Raw Data: {supabaseCandidates?.length || 0} | 
-            Filtered: {filteredCandidates?.length || 0} | 
-            Error: {candidatesError ? 'Yes' : 'No'}
-          </div>
+
         </div>
         <div className="flex gap-2">
           <Button 
@@ -320,18 +366,11 @@ export default function CandidatesPage() {
                 </Button>
               </div>
             ) : filteredCandidates && filteredCandidates.length > 0 ? (
-              <div>
-                {/* Temporary debug info */}
-                <div className="p-4 bg-green-100 mb-4 text-sm">
-                  <strong>Rendering Table:</strong> Found {filteredCandidates.length} candidates to display
-                  <br />
-                  <strong>First candidate:</strong> {filteredCandidates[0]?.name || 'No name'}
-                </div>
-                <div className="overflow-x-auto">
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-56">
+                      <TableHead className="w-72">
                         <Button
                           variant="ghost"
                           className="gap-1 -ml-3"
@@ -342,8 +381,8 @@ export default function CandidatesPage() {
                           <ArrowUpDown className="h-3 w-3" />
                         </Button>
                       </TableHead>
-                      <TableHead>Position</TableHead>
-                      <TableHead className="text-center">
+                      <TableHead className="w-48">Position</TableHead>
+                      <TableHead className="w-24 text-center">
                         <Button
                           variant="ghost"
                           className="gap-1"
@@ -354,9 +393,9 @@ export default function CandidatesPage() {
                           <ArrowUpDown className="h-3 w-3" />
                         </Button>
                       </TableHead>
-                      <TableHead>Recommendation</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>
+                      <TableHead className="w-44">Recommendation</TableHead>
+                      <TableHead className="w-52 text-center">Decision</TableHead>
+                      <TableHead className="w-28">
                         <Button
                           variant="ghost"
                           className="gap-1 -ml-3"
@@ -373,8 +412,6 @@ export default function CandidatesPage() {
                   <TableBody>
                     {filteredCandidates.map((candidate) => {
                       const recConfig = recommendationConfig[candidate.ai_recommendation as keyof typeof recommendationConfig];
-                      const statConfig = statusConfig[candidate.stage as keyof typeof statusConfig] || statusConfig.pending;
-                      const RecIcon = recConfig?.icon || Clock;
 
                       return (
                         <TableRow key={candidate.id} data-testid={`row-candidate-${candidate.id}`}>
@@ -394,7 +431,7 @@ export default function CandidatesPage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {getJobTitle(candidate.job_id)}
+                            <span className="whitespace-nowrap">{getJobTitle(candidate.job_id)}</span>
                           </TableCell>
                           <TableCell className="text-center">
                             <span className={`font-semibold ${
@@ -408,15 +445,33 @@ export default function CandidatesPage() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <div className={`flex items-center gap-1.5 ${recConfig?.color || "text-muted-foreground"}`}>
-                              <RecIcon className="h-4 w-4" />
-                              <span className="text-sm">{recConfig?.label || candidate.ai_recommendation}</span>
+                            <div className={`flex items-center gap-2 ${recConfig?.color || "text-muted-foreground"}`}>
+                              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${recConfig?.dotColor || "bg-gray-400"}`}></div>
+                              <span className="text-sm font-medium whitespace-nowrap">{recConfig?.label || candidate.ai_recommendation}</span>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge className={`${statConfig.bg} ${statConfig.color} border-0`}>
-                              {statConfig.label}
-                            </Badge>
+                            <div className="flex items-center gap-2 justify-center">
+                              <Button
+                                size="sm"
+                                onClick={() => handleCandidateAction(
+                                  recConfig?.buttonLabel || 'Action',
+                                  candidate.id,
+                                  candidate.name
+                                )}
+                                className={`w-20 font-medium text-xs ${recConfig?.buttonColor || "bg-gray-600 hover:bg-gray-700 text-white"}`}
+                              >
+                                {recConfig?.buttonLabel || 'Action'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openCandidateDetails(candidate.id)}
+                                className="w-20 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
+                              >
+                                Preview
+                              </Button>
+                            </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground text-sm">
                             {new Date(candidate.created_at).toLocaleDateString()}
@@ -459,7 +514,6 @@ export default function CandidatesPage() {
                     })}
                   </TableBody>
                 </Table>
-                </div>
               </div>
             ) : (
               <div className="text-center py-12">
