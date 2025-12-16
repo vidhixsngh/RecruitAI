@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -17,6 +18,17 @@ import {
   Eye,
   Bot,
   FileText,
+  UserCheck,
+  UserX,
+  Pause,
+  Loader2,
+  Star,
+  AlertTriangle,
+  Target,
+  FileUser,
+  X,
+  Briefcase,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,11 +53,21 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import type { Job } from "@shared/schema";
 import { motion } from "framer-motion";
-import { fetchCandidatesFromSupabase, testSupabaseConnection, type SupabaseCandidate } from "@/lib/supabase";
+import { fetchCandidatesFromSupabase, testSupabaseConnection, deleteCandidateFromSupabase, type SupabaseCandidate } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 
 const statusConfig = {
@@ -134,7 +156,28 @@ export default function CandidatesPage() {
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [processingDecisions, setProcessingDecisions] = useState<Set<string>>(new Set());
-  const [completedDecisions, setCompletedDecisions] = useState<Map<string, string>>(new Map());
+  const [completedDecisions, setCompletedDecisions] = useState<Map<string, string>>(() => {
+    // Load completed decisions from localStorage on component mount
+    try {
+      const saved = localStorage.getItem('completedDecisions');
+      console.log('Loading completed decisions from localStorage:', saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        console.log('Parsed completed decisions:', parsed);
+        const map = new Map(Object.entries(parsed));
+        console.log('Created Map with entries:', Array.from(map.entries()));
+        return map;
+      }
+    } catch (error) {
+      console.error('Error loading completed decisions from localStorage:', error);
+    }
+    console.log('No saved decisions found, starting with empty Map');
+    return new Map();
+  });
+  const [selectedCandidate, setSelectedCandidate] = useState<SupabaseCandidate | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState<{id: string, name: string} | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const { toast } = useToast();
 
@@ -146,8 +189,6 @@ export default function CandidatesPage() {
     refetchOnWindowFocus: false,
     staleTime: 30000, // 30 seconds
   });
-
-
 
   // Comment out the old API call - we're now using Supabase
   // const { data: candidates, isLoading: candidatesLoading } = useQuery<Candidate[]>({
@@ -170,43 +211,132 @@ export default function CandidatesPage() {
     return jobs?.find((j) => j.id === jobId)?.title || "Unknown Position";
   };
 
-  const filteredCandidates = supabaseCandidates
-    ?.filter((candidate) => {
-      const matchesSearch =
-        candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        candidate.email.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus = statusFilter === "all" || candidate.stage === statusFilter;
+  // SIMPLIFIED ACTION-BASED FILTERING
+  const filteredCandidates = React.useMemo(() => {
+    if (!supabaseCandidates) return [];
+    
+    return supabaseCandidates.filter((candidate) => {
+      // Search functionality
+      const searchLower = searchQuery.toLowerCase().trim();
+      const matchesSearch = searchLower === "" || 
+        (candidate.name && candidate.name.toLowerCase().includes(searchLower)) ||
+        (candidate.email && candidate.email.toLowerCase().includes(searchLower)) ||
+        (candidate.phone && candidate.phone.toLowerCase().includes(searchLower));
       
-      return matchesSearch && matchesStatus;
-    })
-    .sort((a, b) => {
-      let aVal: string | number;
-      let bVal: string | number;
+      // Action-based filtering
+      if (statusFilter === "all") {
+        return matchesSearch;
+      }
+      
+      // Check if decision was already made (completed actions)
+      const isCompleted = completedDecisions.has(candidate.id);
+      const completedAction = completedDecisions.get(candidate.id);
+      
+      let matchesAction = false;
+      
+      switch (statusFilter) {
+        case "processing":
+          // Candidates that are being processed by AI (no AI data available)
+          matchesAction = candidate.ai_score === null || candidate.ai_recommendation === null;
+          break;
+          
+        case "interview":
+          // Candidates recommended for interview OR already completed interview action
+          matchesAction = (candidate.ai_recommendation?.toLowerCase().includes('interview') || 
+                          candidate.ai_recommendation?.toLowerCase().includes('hire') ||
+                          candidate.ai_recommendation?.toLowerCase().includes('strong')) ||
+                         (isCompleted && completedAction === 'interview');
+          break;
+          
+        case "hold":
+          // Candidates recommended for hold OR already completed hold action
+          matchesAction = (candidate.ai_recommendation?.toLowerCase().includes('hold') ||
+                          candidate.ai_recommendation?.toLowerCase().includes('weak')) ||
+                         (isCompleted && completedAction === 'hold');
+          break;
+          
+        case "reject":
+          // Candidates recommended for reject OR already completed reject action
+          matchesAction = candidate.ai_recommendation?.toLowerCase().includes('reject') ||
+                         (isCompleted && completedAction === 'reject');
+          break;
+          
+        case "completed":
+          // Candidates where mail has been sent (any completed action)
+          matchesAction = isCompleted;
+          break;
+          
+        default:
+          matchesAction = false;
+      }
+      
+      return matchesSearch && matchesAction;
+    });
+  }, [supabaseCandidates, statusFilter, searchQuery, completedDecisions]);
+
+  // Debug logging for completed decisions
+  React.useEffect(() => {
+    console.log('=== COMPLETED DECISIONS STATE CHANGED ===');
+    console.log('Size:', completedDecisions.size);
+    console.log('Entries:', Array.from(completedDecisions.entries()));
+    console.log('localStorage value:', localStorage.getItem('completedDecisions'));
+  }, [completedDecisions]);
+
+  // Additional effect to verify persistence on component mount
+  React.useEffect(() => {
+    console.log('=== COMPONENT MOUNTED - CHECKING PERSISTENCE ===');
+    const stored = localStorage.getItem('completedDecisions');
+    console.log('Stored in localStorage:', stored);
+    console.log('Current state size:', completedDecisions.size);
+    console.log('Current state entries:', Array.from(completedDecisions.entries()));
+  }, []);
+
+
+
+  const sortedCandidates = filteredCandidates
+    ?.sort((a, b) => {
+      let aVal: string | number | null;
+      let bVal: string | number | null;
       
       // Map sort fields to Supabase column names
       if (sortField === "resumeScore" || sortField === "ai_score") {
-        aVal = a.ai_score;
-        bVal = b.ai_score;
+        aVal = a.ai_score || 0;
+        bVal = b.ai_score || 0;
       } else if (sortField === "appliedDate" || sortField === "created_at") {
-        aVal = a.created_at;
-        bVal = b.created_at;
+        aVal = a.created_at || "";
+        bVal = b.created_at || "";
       } else if (sortField === "name") {
-        aVal = a.name;
-        bVal = b.name;
+        aVal = a.name || "";
+        bVal = b.name || "";
       } else {
-        aVal = a[sortField as keyof SupabaseCandidate] as string | number;
-        bVal = b[sortField as keyof SupabaseCandidate] as string | number;
+        aVal = (a[sortField as keyof SupabaseCandidate] as string | number) || "";
+        bVal = (b[sortField as keyof SupabaseCandidate] as string | number) || "";
       }
+      
+      // Handle null/undefined values
+      if (aVal === null || aVal === undefined) aVal = "";
+      if (bVal === null || bVal === undefined) bVal = "";
       
       if (typeof aVal === "number" && typeof bVal === "number") {
         return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
       }
       
+      // Convert to strings for comparison
+      const aStr = String(aVal).toLowerCase();
+      const bStr = String(bVal).toLowerCase();
+      
       if (sortDirection === "asc") {
-        return aVal > bVal ? 1 : -1;
+        return aStr.localeCompare(bStr);
       }
-      return aVal < bVal ? 1 : -1;
+      return bStr.localeCompare(aStr);
     });
+
+  // Simple debug logging
+  React.useEffect(() => {
+    if (supabaseCandidates) {
+      console.log(`Filter: "${statusFilter}" | Results: ${sortedCandidates?.length || 0}/${supabaseCandidates.length}`);
+    }
+  }, [statusFilter, sortedCandidates, supabaseCandidates]);
 
 
 
@@ -234,7 +364,7 @@ export default function CandidatesPage() {
           c.ai_recommendation,
           c.stage,
           new Date(c.created_at).toLocaleDateString(),
-          `"${c.ai_summary.replace(/"/g, '""')}"`, // Escape quotes in summary
+          `"${(c.ai_summary || 'Processing...').replace(/"/g, '""')}"`, // Escape quotes in summary
         ].join(",")
       ),
     ].join("\n");
@@ -307,12 +437,34 @@ export default function CandidatesPage() {
 
         // Success - show toast and update UI
         toast({
-          title: "Decision Recorded",
-          description: `${candidateName}'s ${webhookAction} decision has been recorded successfully.`,
+          title: "Mail Sent",
+          description: `${webhookAction.charAt(0).toUpperCase() + webhookAction.slice(1)} notification sent to ${candidateName} successfully.`,
         });
         
         // Add to completed decisions with the action taken
-        setCompletedDecisions(prev => new Map(prev).set(candidateId, webhookAction));
+        setCompletedDecisions(prev => {
+          const newMap = new Map(prev).set(candidateId, webhookAction);
+          console.log('=== SAVING COMPLETED DECISION ===');
+          console.log('Candidate ID:', candidateId);
+          console.log('Action:', webhookAction);
+          console.log('New Map size:', newMap.size);
+          console.log('New Map entries:', Array.from(newMap.entries()));
+          
+          // Save to localStorage for persistence
+          try {
+            const obj = Object.fromEntries(newMap);
+            const jsonString = JSON.stringify(obj);
+            localStorage.setItem('completedDecisions', jsonString);
+            console.log('Saved to localStorage:', jsonString);
+            
+            // Verify it was saved correctly
+            const verification = localStorage.getItem('completedDecisions');
+            console.log('Verification read from localStorage:', verification);
+          } catch (error) {
+            console.error('Error saving completed decisions to localStorage:', error);
+          }
+          return newMap;
+        });
       } else if (response.status === 404) {
         // Handle webhook not found (common in test mode)
         const errorData = await response.json();
@@ -353,189 +505,457 @@ export default function CandidatesPage() {
     }
   };
 
+  const handleDeleteCandidate = (candidateId: string, candidateName: string) => {
+    // Set the candidate to be deleted and show confirmation dialog
+    setDeleteCandidate({ id: candidateId, name: candidateName });
+  };
+
+  const confirmDeleteCandidate = async () => {
+    if (!deleteCandidate) return;
+
+    setIsDeleting(true);
+
+    try {
+      console.log('Deleting candidate:', deleteCandidate.id, deleteCandidate.name);
+      
+      // Show loading toast
+      toast({
+        title: "Deleting Candidate",
+        description: `Removing ${deleteCandidate.name} from the system...`,
+      });
+
+      // Delete from Supabase
+      await deleteCandidateFromSupabase(deleteCandidate.id);
+
+      // Remove from completed decisions if exists
+      setCompletedDecisions(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(deleteCandidate.id);
+        
+        // Update localStorage
+        try {
+          const obj = Object.fromEntries(newMap);
+          localStorage.setItem('completedDecisions', JSON.stringify(obj));
+        } catch (error) {
+          console.error('Error updating localStorage after deletion:', error);
+        }
+        
+        return newMap;
+      });
+
+      // Show success toast
+      toast({
+        title: "Candidate Deleted",
+        description: `${deleteCandidate.name} has been successfully removed from the system.`,
+      });
+
+      // Close the dialog
+      setDeleteCandidate(null);
+
+      // Refresh the candidates list by invalidating the query
+      // The useQuery will automatically refetch the data
+      window.location.reload();
+
+    } catch (error) {
+      console.error('Error deleting candidate:', error);
+      
+      toast({
+        title: "Deletion Failed",
+        description: `Failed to delete ${deleteCandidate.name}. Please try again.`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const openCandidateDetails = (candidateId: string) => {
-    console.log('Opening candidate details for:', candidateId);
-    // TODO: Implement modal or navigation to candidate details
+    const candidate = supabaseCandidates?.find(c => c.id === candidateId);
+    if (candidate) {
+      setSelectedCandidate(candidate);
+      setIsDetailModalOpen(true);
+    }
   };
 
   // Function to determine which buttons to show based on AI recommendation and score
   const getActionButtons = (candidate: SupabaseCandidate) => {
     const isProcessing = processingDecisions.has(candidate.id);
     const isCompleted = completedDecisions.has(candidate.id);
+    const completedAction = completedDecisions.get(candidate.id);
+    
+    // Debug logging for each candidate
+    console.log(`[${candidate.name}] Processing: ${isProcessing}, Completed: ${isCompleted}, Action: ${completedAction}`);
     
     // If decision is already completed, show the completed state
-    if (isCompleted) {
-      const completedAction = completedDecisions.get(candidate.id);
+    if (isCompleted && completedAction) {
+      console.log(`[${candidate.name}] Showing completed state for action: ${completedAction}`);
+      
+      const actionConfig = {
+        interview: { icon: Mail, label: 'Mail Sent', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+        reject: { icon: Mail, label: 'Mail Sent', color: 'bg-red-100 text-red-700 border-red-200' },
+        hold: { icon: Mail, label: 'Mail Sent', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' }
+      };
+      
+      const config = actionConfig[completedAction as keyof typeof actionConfig] || actionConfig.hold;
+      const IconComponent = config.icon;
+      
       return (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center justify-center gap-2">
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${config.color} font-medium text-sm`}>
+            <IconComponent className="h-4 w-4" />
+            {config.label}
+          </div>
           <Button
             size="sm"
-            disabled
-            className="w-20 font-medium text-xs bg-green-600 text-white"
-          >
-            ✓ {completedAction === 'interview' ? 'Interview' : completedAction === 'reject' ? 'Reject' : 'Hold'}
-          </Button>
-          <Button
             variant="outline"
-            size="sm"
             onClick={() => openCandidateDetails(candidate.id)}
-            className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
+            className="border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-700 font-medium px-3 py-2 h-8"
+            title="View candidate details"
           >
-            Preview
+            <Eye className="h-3 w-3" />
           </Button>
         </div>
       );
     }
 
     // Check if AI score and recommendation are available
-    const hasAIData = candidate.ai_score && candidate.ai_recommendation;
+    const hasAIData = candidate.ai_score !== null && candidate.ai_recommendation !== null;
     
     if (!hasAIData) {
-      // No AI data available - show Screen Resume button
+      // Always show analyzing state when AI data is missing
+      // This covers cases where AI is still processing the resume
       return (
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            disabled={isProcessing}
-            onClick={() => handleCandidateAction('Screen Resume', candidate.id, candidate.name)}
-            className="w-28 font-medium text-xs bg-red-900 hover:bg-red-800 text-white flex items-center gap-1"
-          >
-            {isProcessing ? '...' : (
-              <>
-                <FileText className="h-3 w-3" />
-                Screen
-              </>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => openCandidateDetails(candidate.id)}
-            className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
-          >
-            Preview
-          </Button>
+        <div className="flex items-center justify-center">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium text-sm">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            ✨ Analysing...
+          </div>
         </div>
       );
     }
 
     // Determine buttons based on AI recommendation
-    const recommendation = candidate.ai_recommendation.toLowerCase();
+    const recommendation = candidate.ai_recommendation?.toLowerCase() || '';
     
+    // Define action configurations
+    const actionConfigs = {
+      reject: {
+        primary: { 
+          action: 'Reject', 
+          icon: UserX, 
+          className: 'bg-rose-500 hover:bg-rose-600 text-white shadow-sm' 
+        }
+      },
+      interview: {
+        primary: { 
+          action: 'Interview', 
+          icon: UserCheck, 
+          className: 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm' 
+        }
+      },
+      hold: {
+        primary: { 
+          action: 'Hold', 
+          icon: Pause, 
+          className: 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm' 
+        }
+      }
+    };
+
+    let config;
     if (recommendation === 'reject' || recommendation === 'rejected') {
-      return (
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            disabled={isProcessing}
-            onClick={() => handleCandidateAction('Reject', candidate.id, candidate.name)}
-            className="w-16 font-medium text-xs bg-rose-600 hover:bg-rose-700 text-white"
-          >
-            {isProcessing ? '...' : 'Reject'}
-          </Button>
-          <Button
-            size="sm"
-            disabled={isProcessing}
-            onClick={() => handleCandidateAction('Review', candidate.id, candidate.name)}
-            className="w-16 font-medium text-xs bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            {isProcessing ? '...' : 'Review'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => openCandidateDetails(candidate.id)}
-            className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
-          >
-            Preview
-          </Button>
-        </div>
-      );
+      config = actionConfigs.reject;
     } else if (recommendation === 'interview' || recommendation === 'hire' || recommendation === 'strong-maybe') {
-      return (
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            disabled={isProcessing}
-            onClick={() => handleCandidateAction('Interview', candidate.id, candidate.name)}
-            className="w-16 font-medium text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-          >
-            {isProcessing ? '...' : 'Interview'}
-          </Button>
-          <Button
-            size="sm"
-            disabled={isProcessing}
-            onClick={() => handleCandidateAction('Review', candidate.id, candidate.name)}
-            className="w-16 font-medium text-xs bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            {isProcessing ? '...' : 'Review'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => openCandidateDetails(candidate.id)}
-            className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
-          >
-            Preview
-          </Button>
-        </div>
-      );
+      config = actionConfigs.interview;
     } else if (recommendation === 'hold' || recommendation === 'on-hold' || recommendation === 'weak-maybe') {
+      config = actionConfigs.hold;
+    } else {
+      // Fallback - show review button
       return (
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            disabled={isProcessing}
-            onClick={() => handleCandidateAction('Hold', candidate.id, candidate.name)}
-            className="w-16 font-medium text-xs bg-amber-600 hover:bg-amber-700 text-white"
-          >
-            {isProcessing ? '...' : 'Hold'}
-          </Button>
+        <div className="flex items-center justify-center">
           <Button
             size="sm"
             disabled={isProcessing}
             onClick={() => handleCandidateAction('Review', candidate.id, candidate.name)}
-            className="w-16 font-medium text-xs bg-blue-600 hover:bg-blue-700 text-white"
+            className="bg-blue-500 hover:bg-blue-600 text-white border-0 shadow-sm font-medium px-4 py-2 h-8"
           >
-            {isProcessing ? '...' : 'Review'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => openCandidateDetails(candidate.id)}
-            className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
-          >
-            Preview
+            {isProcessing ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <>
+                <Eye className="h-3 w-3 mr-1.5" />
+                Review
+              </>
+            )}
           </Button>
         </div>
       );
     }
 
-    // Fallback for unknown recommendations
+    const PrimaryIcon = config.primary.icon;
+    
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center justify-center gap-2">
         <Button
           size="sm"
           disabled={isProcessing}
-          onClick={() => handleCandidateAction('Review', candidate.id, candidate.name)}
-          className="w-16 font-medium text-xs bg-blue-600 hover:bg-blue-700 text-white"
+          onClick={() => handleCandidateAction(config.primary.action, candidate.id, candidate.name)}
+          className={`${config.primary.className} border-0 font-medium px-4 py-2 h-8`}
         >
-          {isProcessing ? '...' : 'Review'}
+          {isProcessing ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <>
+              <PrimaryIcon className="h-3 w-3 mr-1.5" />
+              {config.primary.action}
+            </>
+          )}
         </Button>
+        
         <Button
-          variant="outline"
           size="sm"
+          variant="outline"
+          disabled={isProcessing}
           onClick={() => openCandidateDetails(candidate.id)}
-          className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
+          className="border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-700 font-medium px-3 py-2 h-8"
         >
-          Preview
+          <Eye className="h-3 w-3" />
         </Button>
       </div>
     );
   };
 
+  // Detailed Candidate Modal Component
+  const CandidateDetailModal = () => {
+    if (!selectedCandidate) return null;
+
+    const job = jobs?.find(j => j.id === selectedCandidate.job_id);
+    
+    return (
+      <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3 text-xl">
+              <FileUser className="h-6 w-6 text-primary" />
+              {selectedCandidate.name}
+            </DialogTitle>
+            <DialogDescription>
+              Applied for {job?.title || 'Unknown Position'} • {new Date(selectedCandidate.created_at).toLocaleDateString()}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 mt-6">
+            {/* Contact Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-slate-600" />
+                <span className="text-sm">{selectedCandidate.email}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-slate-600" />
+                <span className="text-sm">{selectedCandidate.phone}</span>
+              </div>
+              {selectedCandidate.interview_slot && (
+                <div className="md:col-span-2 flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-purple-600" />
+                  <span className="text-sm font-medium text-purple-700">
+                    Interview Scheduled: {selectedCandidate.interview_slot}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* AI Analysis Summary */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Bot className="h-5 w-5 text-primary" />
+                AI Analysis Summary
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* AI Score */}
+                <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border">
+                  <div className="text-3xl font-bold text-blue-600 mb-1">
+                    {selectedCandidate.ai_score !== null ? selectedCandidate.ai_score : (
+                      <div className="flex items-center justify-center gap-2 text-lg">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Analyzing...
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-sm text-slate-600">AI Score</div>
+                </div>
+
+                {/* AI Recommendation */}
+                <div className="text-center p-4 bg-gradient-to-br from-emerald-50 to-green-50 rounded-lg border">
+                  <div className="text-lg font-semibold text-emerald-700 mb-1 capitalize">
+                    {selectedCandidate.ai_recommendation || (
+                      <div className="flex items-center justify-center gap-2 text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Processing...
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-sm text-slate-600">AI Recommendation</div>
+                </div>
+
+                {/* Stage */}
+                <div className="text-center p-4 bg-gradient-to-br from-amber-50 to-yellow-50 rounded-lg border">
+                  <div className="text-lg font-semibold text-amber-700 mb-1 capitalize">
+                    {selectedCandidate.stage}
+                  </div>
+                  <div className="text-sm text-slate-600">Current Stage</div>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Summary */}
+            <div className="space-y-3">
+              <h4 className="font-semibold flex items-center gap-2">
+                <Target className="h-4 w-4 text-slate-600" />
+                AI Summary
+              </h4>
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-700 leading-relaxed">
+                  {selectedCandidate.ai_summary || (
+                    <div className="flex items-center gap-2 text-blue-600">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      AI is analyzing the candidate's profile and generating insights...
+                    </div>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Key Strengths */}
+            {selectedCandidate.ai_key_strengths && selectedCandidate.ai_key_strengths.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="font-semibold flex items-center gap-2 text-emerald-700">
+                  <Star className="h-4 w-4" />
+                  Key Strengths
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedCandidate.ai_key_strengths.map((strength, index) => (
+                    <Badge key={index} variant="secondary" className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                      {strength}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Red Flags */}
+            {selectedCandidate.ai_red_flags && selectedCandidate.ai_red_flags.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="font-semibold flex items-center gap-2 text-red-700">
+                  <AlertTriangle className="h-4 w-4" />
+                  Red Flags
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedCandidate.ai_red_flags.map((flag, index) => (
+                    <Badge key={index} variant="destructive" className="bg-red-100 text-red-800 border-red-200">
+                      {flag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Job Description */}
+            {job && (
+              <div className="space-y-3">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <Briefcase className="h-4 w-4 text-slate-600" />
+                  Job Description
+                </h4>
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <h5 className="font-medium mb-2">{job.title}</h5>
+                  <p className="text-sm text-slate-700 mb-3">{job.description_text}</p>
+                  {job.requirements && (
+                    <div>
+                      <h6 className="font-medium text-sm mb-1">Requirements:</h6>
+                      <p className="text-sm text-slate-600">{job.requirements}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Resume Text */}
+            <div className="space-y-3">
+              <h4 className="font-semibold flex items-center gap-2">
+                <FileText className="h-4 w-4 text-slate-600" />
+                Resume Content
+              </h4>
+              <div className="p-4 bg-slate-50 rounded-lg max-h-60 overflow-y-auto">
+                <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans">
+                  {selectedCandidate.resume_text}
+                </pre>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => setIsDetailModalOpen(false)}
+                className="flex items-center gap-2"
+              >
+                <X className="h-4 w-4" />
+                Close
+              </Button>
+              
+              {!completedDecisions.has(selectedCandidate.id) && (
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      handleCandidateAction('Reject', selectedCandidate.id, selectedCandidate.name);
+                      setIsDetailModalOpen(false);
+                    }}
+                    className="bg-rose-500 hover:bg-rose-600 text-white flex items-center gap-2"
+                    disabled={processingDecisions.has(selectedCandidate.id)}
+                  >
+                    <UserX className="h-4 w-4" />
+                    Reject
+                  </Button>
+                  
+                  <Button
+                    onClick={() => {
+                      handleCandidateAction('Hold', selectedCandidate.id, selectedCandidate.name);
+                      setIsDetailModalOpen(false);
+                    }}
+                    className="bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-2"
+                    disabled={processingDecisions.has(selectedCandidate.id)}
+                  >
+                    <Pause className="h-4 w-4" />
+                    Hold
+                  </Button>
+                  
+                  <Button
+                    onClick={() => {
+                      handleCandidateAction('Interview', selectedCandidate.id, selectedCandidate.name);
+                      setIsDetailModalOpen(false);
+                    }}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white flex items-center gap-2"
+                    disabled={processingDecisions.has(selectedCandidate.id)}
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    Interview
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-gradient-to-br dark:from-black dark:via-slate-950 dark:to-gray-900">
+      <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -553,29 +973,6 @@ export default function CandidatesPage() {
 
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            className="gap-2" 
-            onClick={async () => {
-              try {
-                const connectionTest = await testSupabaseConnection();
-                console.log('Connection test:', connectionTest);
-                
-                if (connectionTest.success) {
-                  const result = await fetchCandidatesFromSupabase();
-                  console.log('Test fetch result:', result);
-                  alert(`✅ Supabase connected! Fetched ${result.length} candidates`);
-                } else {
-                  alert(`❌ Connection failed: ${connectionTest.error}`);
-                }
-              } catch (error) {
-                console.error('Test error:', error);
-                alert(`❌ Error: ${error}`);
-              }
-            }}
-          >
-            Test Supabase
-          </Button>
           <Button variant="outline" className="gap-2" onClick={handleExport} data-testid="button-export">
             <Download className="h-4 w-4" />
             Export CSV
@@ -585,30 +982,47 @@ export default function CandidatesPage() {
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Search by name or email..."
+            placeholder="Search by name, email, or phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className={`pl-10 ${searchQuery ? 'pr-8' : 'pr-3'} transition-all duration-200`}
             data-testid="input-search"
           />
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 hover:bg-slate-100 rounded-full transition-colors"
+              title="Clear search"
+            >
+              <X className="h-3 w-3 text-muted-foreground" />
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select 
+            value={statusFilter} 
+            onValueChange={(value) => {
+              console.log('=== FILTER CHANGE ===');
+              console.log('Previous filter:', statusFilter);
+              console.log('New filter:', value);
+              setStatusFilter(value);
+            }}
+          >
             <SelectTrigger className="w-48" data-testid="select-status-filter">
-              <SelectValue placeholder="Filter by status" />
+              <SelectValue placeholder="Filter by action" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Stages</SelectItem>
-              <SelectItem value="applied">Applied</SelectItem>
-              <SelectItem value="screening">Screening</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="interview_scheduled">Interview Scheduled</SelectItem>
-              <SelectItem value="interviewed">Interviewed</SelectItem>
-              <SelectItem value="hired">Hired</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="all">All Candidates</SelectItem>
+              <SelectItem value="processing">Processing</SelectItem>
+              <SelectItem value="interview">Interview</SelectItem>
+              <SelectItem value="hold">On Hold</SelectItem>
+              <SelectItem value="reject">Rejected</SelectItem>
+              <SelectItem value="completed">Mail Sent</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -649,12 +1063,12 @@ export default function CandidatesPage() {
                   Retry
                 </Button>
               </div>
-            ) : filteredCandidates && filteredCandidates.length > 0 ? (
+            ) : sortedCandidates && sortedCandidates.length > 0 ? (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-72">
+                      <TableHead className="w-52">
                         <Button
                           variant="ghost"
                           className="gap-1 -ml-3"
@@ -665,7 +1079,7 @@ export default function CandidatesPage() {
                           <ArrowUpDown className="h-3 w-3" />
                         </Button>
                       </TableHead>
-                      <TableHead className="w-48">Position</TableHead>
+                      <TableHead className="w-40">Position</TableHead>
                       <TableHead className="w-24 text-center">
                         <Button
                           variant="ghost"
@@ -673,12 +1087,13 @@ export default function CandidatesPage() {
                           onClick={() => handleSort("ai_score")}
                           data-testid="sort-score"
                         >
-                          AI Score
+                          Resume Score
                           <ArrowUpDown className="h-3 w-3" />
                         </Button>
                       </TableHead>
-                      <TableHead className="w-44">Recommendation</TableHead>
-                      <TableHead className="w-72 text-center">Actions</TableHead>
+                      <TableHead className="w-40">Recommendation</TableHead>
+                      <TableHead className="w-44 text-center">Actions</TableHead>
+                      <TableHead className="w-36 text-center">Interview</TableHead>
                       <TableHead className="w-28">
                         <Button
                           variant="ghost"
@@ -694,50 +1109,75 @@ export default function CandidatesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCandidates.map((candidate) => {
-                      const recConfig = recommendationConfig[candidate.ai_recommendation as keyof typeof recommendationConfig];
+                    {sortedCandidates?.map((candidate) => {
+                      const recConfig = candidate.ai_recommendation 
+                        ? recommendationConfig[candidate.ai_recommendation as keyof typeof recommendationConfig]
+                        : null;
 
                       return (
                         <TableRow key={candidate.id} data-testid={`row-candidate-${candidate.id}`}>
                           <TableCell>
                             <div>
                               <p className="font-medium">{candidate.name}</p>
-                              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                                <span className="flex items-center gap-1">
-                                  <Mail className="h-3 w-3" />
-                                  {candidate.email}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <Phone className="h-3 w-3" />
-                                  {candidate.phone}
-                                </span>
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                                <Mail className="h-3 w-3" />
+                                <span>{candidate.email}</span>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            <span className="whitespace-nowrap">{getJobTitle(candidate.job_id)}</span>
+                            <span className="text-sm leading-tight break-words">{getJobTitle(candidate.job_id)}</span>
                           </TableCell>
                           <TableCell className="text-center">
-                            <span className={`font-semibold ${
-                              candidate.ai_score >= 80
-                                ? "text-emerald-600"
-                                : candidate.ai_score >= 60
-                                ? "text-amber-600"
-                                : "text-rose-600"
-                            }`}>
-                              {candidate.ai_score}
-                            </span>
+                            {candidate.ai_score !== null ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`font-bold text-sm px-2 py-1 rounded-full ${
+                                  candidate.ai_score >= 70
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : candidate.ai_score >= 50
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : "bg-red-100 text-red-700"
+                                }`}>
+                                  {candidate.ai_score}/100
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center">
+                                <div className="flex items-center gap-1 text-xs text-blue-600">
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  Analysing...
+                                </div>
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
-                            <div className={`flex items-center gap-2 ${recConfig?.color || "text-muted-foreground"}`}>
-                              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${recConfig?.dotColor || "bg-gray-400"}`}></div>
-                              <span className="text-sm font-medium whitespace-nowrap">{recConfig?.label || candidate.ai_recommendation}</span>
-                            </div>
+                            {candidate.ai_recommendation ? (
+                              <div className={`flex items-center gap-2 ${recConfig?.color || "text-muted-foreground"}`}>
+                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${recConfig?.dotColor || "bg-gray-400"}`}></div>
+                                <span className="text-sm font-medium whitespace-nowrap">{recConfig?.label || candidate.ai_recommendation}</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 text-blue-600">
+                                <div className="flex items-center gap-1 text-xs">
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  ✨ Analysing...
+                                </div>
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-1 justify-center">
-                              {getActionButtons(candidate)}
-                            </div>
+                            {getActionButtons(candidate)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {candidate.interview_slot ? (
+                              <div className="flex items-center justify-center">
+                                <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-xs px-2 py-1">
+                                  🗓️ {candidate.interview_slot}
+                                </Badge>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">Not scheduled</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-muted-foreground text-sm">
                             {new Date(candidate.created_at).toLocaleDateString()}
@@ -772,6 +1212,14 @@ export default function CandidatesPage() {
                                     </DropdownMenuItem>
                                   </Link>
                                 )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteCandidate(candidate.id, candidate.name)}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 focus:text-red-700 focus:bg-red-50"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Candidate
+                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -800,16 +1248,84 @@ export default function CandidatesPage() {
         </Card>
       </motion.div>
 
-      {filteredCandidates && filteredCandidates.length > 0 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            Showing {filteredCandidates.length} of {supabaseCandidates?.length} candidates
-          </span>
-          <span>
-            Last updated: {new Date().toLocaleString()}
-          </span>
+      {supabaseCandidates && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>
+              Showing {sortedCandidates?.length || 0} of {supabaseCandidates.length} candidates
+              {searchQuery && ` matching "${searchQuery}"`}
+              {statusFilter !== "all" && ` in "${statusFilter}" stage`}
+            </span>
+            <span>
+              Last updated: {new Date().toLocaleString()}
+            </span>
+          </div>
+          <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+            🔍 Active Filter: "{statusFilter}" | Search: "{searchQuery || 'none'}" | Results: {sortedCandidates?.length || 0} | Completed Decisions: {completedDecisions.size}
+          </div>
         </div>
       )}
+
+      {/* Candidate Detail Modal */}
+      <CandidateDetailModal />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteCandidate} onOpenChange={() => setDeleteCandidate(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Delete Candidate
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{deleteCandidate?.name}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-4">
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-800">
+                <strong>Warning:</strong> This action cannot be undone. This will permanently remove:
+              </p>
+              <ul className="mt-2 text-sm text-red-700 list-disc list-inside space-y-1">
+                <li>Candidate profile and contact information</li>
+                <li>Resume content and AI analysis</li>
+                <li>Application history and status</li>
+                <li>Interview scheduling data</li>
+              </ul>
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setDeleteCandidate(null)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDeleteCandidate}
+                disabled={isDeleting}
+                className="flex items-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    Delete Candidate
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      </div>
     </div>
   );
 }

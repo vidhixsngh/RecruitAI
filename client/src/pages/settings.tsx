@@ -60,7 +60,8 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-gradient-to-br dark:from-black dark:via-slate-950 dark:to-gray-900">
+      <div className="p-6 space-y-6 max-w-4xl mx-auto">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -313,6 +314,7 @@ export default function SettingsPage() {
             Save Changes
           </Button>
         </motion.div>
+      </div>
       </div>
     </div>
   );

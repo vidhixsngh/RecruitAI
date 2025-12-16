@@ -10,16 +10,18 @@ export interface SupabaseCandidate {
   id: string
   created_at: string
   job_id: string
-  ai_score: number
+  ai_score: number | null
   phone: string
   resume_text: string
-  ai_key_strengths: string[]
+  ai_key_strengths: string[] | null
   stage: string
-  ai_red_flags: string[]
-  ai_recommendation: string
-  ai_summary: string
+  ai_red_flags: string[] | null
+  ai_recommendation: string | null
+  ai_summary: string | null
   name: string
   email: string
+  interview_slot: string | null
+  status: string | null
 }
 
 // Test Supabase connection
@@ -209,6 +211,28 @@ export async function fetchJobByIdFromSupabase(jobId: string): Promise<SupabaseJ
     return data
   } catch (error) {
     console.error('Error fetching job:', error)
+    throw error
+  }
+}
+
+// Function to delete a candidate from Supabase
+export async function deleteCandidateFromSupabase(candidateId: string): Promise<void> {
+  try {
+    console.log('Deleting candidate from Supabase:', candidateId)
+    
+    const { error } = await supabase
+      .from('candidates')
+      .delete()
+      .eq('id', candidateId)
+
+    if (error) {
+      console.error('Supabase candidate deletion error:', error)
+      throw new Error(`Failed to delete candidate: ${error.message}`)
+    }
+
+    console.log('Successfully deleted candidate:', candidateId)
+  } catch (error) {
+    console.error('Error deleting candidate:', error)
     throw error
   }
 }

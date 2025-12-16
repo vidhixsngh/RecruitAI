@@ -48,7 +48,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { motion } from "framer-motion";
-import { createJobInSupabase, fetchJobsFromSupabase, type SupabaseJob, type InsertJob as SupabaseInsertJob } from "@/lib/supabase";
+import { createJobInSupabase, fetchJobsFromSupabase, fetchCandidatesFromSupabase, type SupabaseJob, type InsertJob as SupabaseInsertJob, type SupabaseCandidate } from "@/lib/supabase";
 
 
 export default function JobsPage() {
@@ -57,10 +57,12 @@ export default function JobsPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isScreeningDialogOpen, setIsScreeningDialogOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [isApplicantsDialogOpen, setIsApplicantsDialogOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<SupabaseJob | null>(null);
   const [createdJob, setCreatedJob] = useState<SupabaseJob | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [copiedJobId, setCopiedJobId] = useState<string | null>(null);
+  const [jobApplicants, setJobApplicants] = useState<SupabaseCandidate[]>([]);
   const [newJob, setNewJob] = useState<Partial<SupabaseInsertJob>>({
     title: "",
     department: "",
@@ -181,8 +183,29 @@ export default function JobsPage() {
     }
   };
 
+  const handleViewApplicants = async (job: SupabaseJob) => {
+    try {
+      setSelectedJob(job);
+      
+      // Fetch all candidates and filter by job_id
+      const allCandidates = await fetchCandidatesFromSupabase();
+      const jobCandidates = allCandidates.filter(candidate => candidate.job_id === job.id);
+      
+      setJobApplicants(jobCandidates);
+      setIsApplicantsDialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching applicants:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch applicants for this job.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-gradient-to-br dark:from-black dark:via-slate-950 dark:to-gray-900">
+      <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -194,7 +217,7 @@ export default function JobsPage() {
             Job Openings
           </h1>
           <p className="text-muted-foreground mt-1">
-            Manage your open positions and start screening candidates
+            Manage your open positions and view applicants for each role
           </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -467,14 +490,11 @@ export default function JobsPage() {
                   <div className="flex gap-2">
                     <Button
                       className="flex-1 gap-2"
-                      onClick={() => {
-                        setSelectedJob(job);
-                        setIsScreeningDialogOpen(true);
-                      }}
-                      data-testid={`button-screen-${job.id}`}
+                      onClick={() => handleViewApplicants(job)}
+                      data-testid={`button-applicants-${job.id}`}
                     >
-                      <Bot className="h-4 w-4" />
-                      Start Screening
+                      <Users className="h-4 w-4" />
+                      View Applicants
                     </Button>
                     <Link href={`/jobs/${job.id}`}>
                       <Button variant="outline" size="icon" data-testid={`button-details-${job.id}`}>
@@ -575,6 +595,106 @@ export default function JobsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Applicants Dialog */}
+      <Dialog open={isApplicantsDialogOpen} onOpenChange={setIsApplicantsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              Applicants for {selectedJob?.title}
+            </DialogTitle>
+            <DialogDescription>
+              {jobApplicants.length} applicant{jobApplicants.length !== 1 ? 's' : ''} have applied for this position
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            {jobApplicants.length > 0 ? (
+              <div className="space-y-3">
+                {jobApplicants.map((applicant, index) => (
+                  <div
+                    key={applicant.id}
+                    className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-medium text-sm">
+                      {index + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{applicant.name}</p>
+                      <p className="text-sm text-muted-foreground truncate">{applicant.email}</p>
+                      {applicant.ai_score && (
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                            applicant.ai_score >= 70
+                              ? "bg-emerald-100 text-emerald-700"
+                              : applicant.ai_score >= 50
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-red-100 text-red-700"
+                          }`}>
+                            Score: {applicant.ai_score}/100
+                          </span>
+                          {applicant.ai_recommendation && (
+                            <span className="text-xs text-muted-foreground capitalize">
+                              • {applicant.ai_recommendation}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Link href={`/candidates`}>
+                        <Button variant="outline" size="sm" className="h-8 px-3 text-xs">
+                          <Eye className="h-3 w-3 mr-1" />
+                          View Details
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No applicants yet</h3>
+                <p className="text-muted-foreground mb-4">
+                  No one has applied for this position yet. Share the application link to start receiving applications.
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const link = getPublicApplicationLink(selectedJob?.id || '');
+                      navigator.clipboard.writeText(link);
+                      toast({
+                        title: "Link Copied",
+                        description: "Application link copied to clipboard",
+                      });
+                    }}
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    Copy Application Link
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsApplicantsDialogOpen(false)}>
+              Close
+            </Button>
+            {jobApplicants.length > 0 && (
+              <Link href="/candidates">
+                <Button>
+                  View All Candidates
+                </Button>
+              </Link>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Success Modal with Public Application Link */}
       <Dialog open={isSuccessModalOpen} onOpenChange={setIsSuccessModalOpen}>
         <DialogContent className="max-w-md">
@@ -636,6 +756,7 @@ export default function JobsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

@@ -294,7 +294,7 @@ export async function registerRoutes(
       const fetch = (await import('node-fetch')).default;
       
       console.log('Sending to n8n webhook...');
-      const response = await fetch('https://vidhiii.app.n8n.cloud/webhook-test/upload-resume', {
+      const response = await fetch('https://vidhiii.app.n8n.cloud/webhook/upload-resume', {
         method: 'POST',
         body: formData,
         headers: formData.getHeaders(),

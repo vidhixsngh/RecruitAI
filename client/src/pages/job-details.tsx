@@ -60,7 +60,8 @@ export default function JobDetailsPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6 max-w-4xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-gradient-to-br dark:from-black dark:via-slate-950 dark:to-gray-900">
+        <div className="p-6 space-y-6 max-w-4xl mx-auto">
         <Skeleton className="h-8 w-48" />
         <Card>
           <CardHeader>
@@ -72,23 +73,27 @@ export default function JobDetailsPage() {
             <Skeleton className="h-24 w-full" />
           </CardContent>
         </Card>
+        </div>
       </div>
     );
   }
 
   if (!job) {
     return (
-      <div className="p-6 text-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-gradient-to-br dark:from-black dark:via-slate-950 dark:to-gray-900">
+        <div className="p-6 text-center">
         <p className="text-muted-foreground">Job not found</p>
         <Link href="/jobs">
           <Button variant="link">Back to Jobs</Button>
         </Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-gradient-to-br dark:from-black dark:via-slate-950 dark:to-gray-900">
+      <div className="p-6 space-y-6 max-w-4xl mx-auto">
       <motion.div
         initial={{ opacity: 0, x: -10 }}
         animate={{ opacity: 1, x: 0 }}
@@ -221,6 +226,7 @@ export default function JobDetailsPage() {
           </CardContent>
         </Card>
       </motion.div>
+      </div>
     </div>
   );
 }
