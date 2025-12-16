@@ -123,13 +123,10 @@ export default function ApplyPage() {
       formData.append('whatsapp_number', form.whatsapp_number);
       formData.append('resume', form.resume);
 
-      console.log('FormData entries:');
-      for (let [key, value] of formData.entries()) {
-        console.log(key, value);
-      }
+      console.log('FormData prepared with candidate info and resume file');
 
-      console.log('Sending request to backend proxy...');
-      const response = await fetch('/webhook/submit-application', {
+      console.log('Sending request to n8n webhook...');
+      const response = await fetch('https://vidhiii.app.n8n.cloud/webhook/upload-resume', {
         method: 'POST',
         body: formData,
       });

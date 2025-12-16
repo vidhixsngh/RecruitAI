@@ -16,6 +16,7 @@ import {
   MoreVertical,
   Eye,
   Bot,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ import {
 import type { Job } from "@shared/schema";
 import { motion } from "framer-motion";
 import { fetchCandidatesFromSupabase, testSupabaseConnection, type SupabaseCandidate } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 const statusConfig = {
   pending: { label: "Pending", color: "text-muted-foreground", bg: "bg-muted" },
@@ -131,6 +133,10 @@ export default function CandidatesPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [processingDecisions, setProcessingDecisions] = useState<Set<string>>(new Set());
+  const [completedDecisions, setCompletedDecisions] = useState<Map<string, string>>(new Map());
+  
+  const { toast } = useToast();
 
   // Fetch candidates from Supabase
   const { data: supabaseCandidates, isLoading: candidatesLoading, error: candidatesError } = useQuery<SupabaseCandidate[]>({
@@ -241,13 +247,291 @@ export default function CandidatesPage() {
     a.click();
   };
 
-  const handleCandidateAction = (action: string, candidateId: string, candidateName: string) => {
-    console.log('Decision made:', action, candidateId, candidateName);
+  const handleCandidateAction = async (action: string, candidateId: string, candidateName: string) => {
+    // Find the candidate to get their details
+    const candidate = supabaseCandidates?.find(c => c.id === candidateId);
+    if (!candidate) {
+      toast({
+        title: "Error",
+        description: "Candidate not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Handle special actions that don't go to webhook
+    if (action === 'Screen Resume' || action === 'Review') {
+      // For now, just show a toast - these could navigate to different pages
+      toast({
+        title: `${action} Action`,
+        description: `${action} action for ${candidateName} - this would navigate to the appropriate page.`,
+      });
+      return;
+    }
+
+    // Convert action to lowercase for webhook (interview, reject, hold)
+    const webhookAction = action.toLowerCase();
+    
+    // Add to processing set
+    setProcessingDecisions(prev => new Set(prev).add(candidateId));
+
+    const payload = {
+      candidate_name: candidate.name,
+      email: candidate.email,
+      action: webhookAction,
+      phone: candidate.phone,
+    };
+
+    console.log('Sending webhook payload:', payload);
+
+    try {
+      const response = await fetch('https://vidhiii.app.n8n.cloud/webhook/candidate_action', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      console.log('Webhook response status:', response.status);
+
+      if (response.ok) {
+        // Try to get response body for additional info
+        let responseData;
+        try {
+          responseData = await response.json();
+          console.log('Webhook response data:', responseData);
+        } catch (e) {
+          console.log('Webhook response (text):', await response.text());
+        }
+
+        // Success - show toast and update UI
+        toast({
+          title: "Decision Recorded",
+          description: `${candidateName}'s ${webhookAction} decision has been recorded successfully.`,
+        });
+        
+        // Add to completed decisions with the action taken
+        setCompletedDecisions(prev => new Map(prev).set(candidateId, webhookAction));
+      } else if (response.status === 404) {
+        // Handle webhook not found (common in test mode)
+        const errorData = await response.json();
+        console.error('Webhook not found:', errorData);
+        
+        toast({
+          title: "Webhook Not Active",
+          description: "The webhook endpoint is not currently active. Please activate it in n8n and try again.",
+          variant: "destructive",
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('Webhook error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Error sending decision to webhook:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = `Failed to record decision for ${candidateName}. Please try again.`;
+      
+      if (error instanceof Error && error.name === 'TypeError' && error.message.includes('fetch')) {
+        errorMessage = 'Network error: Unable to connect to the webhook. Please check your internet connection.';
+      }
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      // Remove from processing set
+      setProcessingDecisions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(candidateId);
+        return newSet;
+      });
+    }
   };
 
   const openCandidateDetails = (candidateId: string) => {
     console.log('Opening candidate details for:', candidateId);
     // TODO: Implement modal or navigation to candidate details
+  };
+
+  // Function to determine which buttons to show based on AI recommendation and score
+  const getActionButtons = (candidate: SupabaseCandidate) => {
+    const isProcessing = processingDecisions.has(candidate.id);
+    const isCompleted = completedDecisions.has(candidate.id);
+    
+    // If decision is already completed, show the completed state
+    if (isCompleted) {
+      const completedAction = completedDecisions.get(candidate.id);
+      return (
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            disabled
+            className="w-20 font-medium text-xs bg-green-600 text-white"
+          >
+            ✓ {completedAction === 'interview' ? 'Interview' : completedAction === 'reject' ? 'Reject' : 'Hold'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openCandidateDetails(candidate.id)}
+            className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
+          >
+            Preview
+          </Button>
+        </div>
+      );
+    }
+
+    // Check if AI score and recommendation are available
+    const hasAIData = candidate.ai_score && candidate.ai_recommendation;
+    
+    if (!hasAIData) {
+      // No AI data available - show Screen Resume button
+      return (
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            disabled={isProcessing}
+            onClick={() => handleCandidateAction('Screen Resume', candidate.id, candidate.name)}
+            className="w-28 font-medium text-xs bg-red-900 hover:bg-red-800 text-white flex items-center gap-1"
+          >
+            {isProcessing ? '...' : (
+              <>
+                <FileText className="h-3 w-3" />
+                Screen
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openCandidateDetails(candidate.id)}
+            className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
+          >
+            Preview
+          </Button>
+        </div>
+      );
+    }
+
+    // Determine buttons based on AI recommendation
+    const recommendation = candidate.ai_recommendation.toLowerCase();
+    
+    if (recommendation === 'reject' || recommendation === 'rejected') {
+      return (
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            disabled={isProcessing}
+            onClick={() => handleCandidateAction('Reject', candidate.id, candidate.name)}
+            className="w-16 font-medium text-xs bg-rose-600 hover:bg-rose-700 text-white"
+          >
+            {isProcessing ? '...' : 'Reject'}
+          </Button>
+          <Button
+            size="sm"
+            disabled={isProcessing}
+            onClick={() => handleCandidateAction('Review', candidate.id, candidate.name)}
+            className="w-16 font-medium text-xs bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {isProcessing ? '...' : 'Review'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openCandidateDetails(candidate.id)}
+            className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
+          >
+            Preview
+          </Button>
+        </div>
+      );
+    } else if (recommendation === 'interview' || recommendation === 'hire' || recommendation === 'strong-maybe') {
+      return (
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            disabled={isProcessing}
+            onClick={() => handleCandidateAction('Interview', candidate.id, candidate.name)}
+            className="w-16 font-medium text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            {isProcessing ? '...' : 'Interview'}
+          </Button>
+          <Button
+            size="sm"
+            disabled={isProcessing}
+            onClick={() => handleCandidateAction('Review', candidate.id, candidate.name)}
+            className="w-16 font-medium text-xs bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {isProcessing ? '...' : 'Review'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openCandidateDetails(candidate.id)}
+            className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
+          >
+            Preview
+          </Button>
+        </div>
+      );
+    } else if (recommendation === 'hold' || recommendation === 'on-hold' || recommendation === 'weak-maybe') {
+      return (
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            disabled={isProcessing}
+            onClick={() => handleCandidateAction('Hold', candidate.id, candidate.name)}
+            className="w-16 font-medium text-xs bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            {isProcessing ? '...' : 'Hold'}
+          </Button>
+          <Button
+            size="sm"
+            disabled={isProcessing}
+            onClick={() => handleCandidateAction('Review', candidate.id, candidate.name)}
+            className="w-16 font-medium text-xs bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {isProcessing ? '...' : 'Review'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openCandidateDetails(candidate.id)}
+            className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
+          >
+            Preview
+          </Button>
+        </div>
+      );
+    }
+
+    // Fallback for unknown recommendations
+    return (
+      <div className="flex items-center gap-1">
+        <Button
+          size="sm"
+          disabled={isProcessing}
+          onClick={() => handleCandidateAction('Review', candidate.id, candidate.name)}
+          className="w-16 font-medium text-xs bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          {isProcessing ? '...' : 'Review'}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => openCandidateDetails(candidate.id)}
+          className="w-16 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
+        >
+          Preview
+        </Button>
+      </div>
+    );
   };
 
   return (
@@ -394,7 +678,7 @@ export default function CandidatesPage() {
                         </Button>
                       </TableHead>
                       <TableHead className="w-44">Recommendation</TableHead>
-                      <TableHead className="w-52 text-center">Decision</TableHead>
+                      <TableHead className="w-72 text-center">Actions</TableHead>
                       <TableHead className="w-28">
                         <Button
                           variant="ghost"
@@ -451,26 +735,8 @@ export default function CandidatesPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2 justify-center">
-                              <Button
-                                size="sm"
-                                onClick={() => handleCandidateAction(
-                                  recConfig?.buttonLabel || 'Action',
-                                  candidate.id,
-                                  candidate.name
-                                )}
-                                className={`w-20 font-medium text-xs ${recConfig?.buttonColor || "bg-gray-600 hover:bg-gray-700 text-white"}`}
-                              >
-                                {recConfig?.buttonLabel || 'Action'}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openCandidateDetails(candidate.id)}
-                                className="w-20 border-2 border-red-900 text-red-900 hover:bg-red-900 hover:text-white font-medium text-xs"
-                              >
-                                Preview
-                              </Button>
+                            <div className="flex items-center gap-1 justify-center">
+                              {getActionButtons(candidate)}
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground text-sm">
