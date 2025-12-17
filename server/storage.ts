@@ -17,7 +17,7 @@ export interface IStorage {
   createJob(job: InsertJob): Promise<Job>;
   updateJob(id: string, job: Partial<Job>): Promise<Job | undefined>;
   deleteJob(id: string): Promise<boolean>;
-// check2
+// check2 hehe 
   getCandidates(): Promise<Candidate[]>;
   getCandidate(id: string): Promise<Candidate | undefined>;
   getCandidatesByJobId(jobId: string): Promise<Candidate[]>;
