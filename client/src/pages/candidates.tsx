@@ -160,18 +160,18 @@ export default function CandidatesPage() {
     // Load completed decisions from localStorage on component mount
     try {
       const saved = localStorage.getItem('completedDecisions');
-      console.log('Loading completed decisions from localStorage:', saved);
+      console.log('🔄 Loading completed decisions from localStorage:', saved);
       if (saved) {
         const parsed = JSON.parse(saved);
-        console.log('Parsed completed decisions:', parsed);
+        console.log('📋 Parsed completed decisions:', parsed);
         const map = new Map(Object.entries(parsed));
-        console.log('Created Map with entries:', Array.from(map.entries()));
+        console.log('🗺️ Created Map with entries:', Array.from(map.entries()));
         return map;
       }
     } catch (error) {
-      console.error('Error loading completed decisions from localStorage:', error);
+      console.error('❌ Error loading completed decisions from localStorage:', error);
     }
-    console.log('No saved decisions found, starting with empty Map');
+    console.log('🆕 No saved decisions found, starting with empty Map');
     return new Map();
   });
   const [selectedCandidate, setSelectedCandidate] = useState<SupabaseCandidate | null>(null);
@@ -276,19 +276,39 @@ export default function CandidatesPage() {
 
   // Debug logging for completed decisions
   React.useEffect(() => {
-    console.log('=== COMPLETED DECISIONS STATE CHANGED ===');
-    console.log('Size:', completedDecisions.size);
-    console.log('Entries:', Array.from(completedDecisions.entries()));
-    console.log('localStorage value:', localStorage.getItem('completedDecisions'));
+    console.log('🔄 === COMPLETED DECISIONS STATE CHANGED ===');
+    console.log('📊 Size:', completedDecisions.size);
+    console.log('📝 Entries:', Array.from(completedDecisions.entries()));
+    console.log('💾 localStorage value:', localStorage.getItem('completedDecisions'));
+    
+    // Double-check localStorage persistence
+    if (completedDecisions.size > 0) {
+      const obj = Object.fromEntries(completedDecisions);
+      const jsonString = JSON.stringify(obj);
+      localStorage.setItem('completedDecisions', jsonString);
+      console.log('🔄 Re-saved to localStorage to ensure persistence:', jsonString);
+    }
   }, [completedDecisions]);
 
   // Additional effect to verify persistence on component mount
   React.useEffect(() => {
-    console.log('=== COMPONENT MOUNTED - CHECKING PERSISTENCE ===');
+    console.log('🚀 === COMPONENT MOUNTED - CHECKING PERSISTENCE ===');
     const stored = localStorage.getItem('completedDecisions');
-    console.log('Stored in localStorage:', stored);
-    console.log('Current state size:', completedDecisions.size);
-    console.log('Current state entries:', Array.from(completedDecisions.entries()));
+    console.log('💾 Stored in localStorage:', stored);
+    console.log('📊 Current state size:', completedDecisions.size);
+    console.log('📝 Current state entries:', Array.from(completedDecisions.entries()));
+    
+    // If there's a mismatch, reload from localStorage
+    if (stored && completedDecisions.size === 0) {
+      try {
+        const parsed = JSON.parse(stored);
+        const newMap = new Map(Object.entries(parsed));
+        console.log('🔄 Reloading from localStorage due to mismatch');
+        setCompletedDecisions(newMap);
+      } catch (error) {
+        console.error('❌ Error reloading from localStorage:', error);
+      }
+    }
   }, []);
 
 
@@ -444,24 +464,29 @@ export default function CandidatesPage() {
         // Add to completed decisions with the action taken
         setCompletedDecisions(prev => {
           const newMap = new Map(prev).set(candidateId, webhookAction);
-          console.log('=== SAVING COMPLETED DECISION ===');
-          console.log('Candidate ID:', candidateId);
-          console.log('Action:', webhookAction);
-          console.log('New Map size:', newMap.size);
-          console.log('New Map entries:', Array.from(newMap.entries()));
+          console.log('💾 === SAVING COMPLETED DECISION ===');
+          console.log('👤 Candidate ID:', candidateId);
+          console.log('🎯 Action:', webhookAction);
+          console.log('📊 New Map size:', newMap.size);
+          console.log('📝 New Map entries:', Array.from(newMap.entries()));
           
           // Save to localStorage for persistence
           try {
             const obj = Object.fromEntries(newMap);
             const jsonString = JSON.stringify(obj);
             localStorage.setItem('completedDecisions', jsonString);
-            console.log('Saved to localStorage:', jsonString);
+            console.log('💾 Saved to localStorage:', jsonString);
             
             // Verify it was saved correctly
             const verification = localStorage.getItem('completedDecisions');
-            console.log('Verification read from localStorage:', verification);
+            console.log('✅ Verification read from localStorage:', verification);
+            
+            // Force a small delay to ensure state update
+            setTimeout(() => {
+              console.log('🔄 Post-save state check - Map size:', newMap.size);
+            }, 100);
           } catch (error) {
-            console.error('Error saving completed decisions to localStorage:', error);
+            console.error('❌ Error saving completed decisions to localStorage:', error);
           }
           return newMap;
         });
@@ -583,12 +608,15 @@ export default function CandidatesPage() {
     const isCompleted = completedDecisions.has(candidate.id);
     const completedAction = completedDecisions.get(candidate.id);
     
-    // Debug logging for each candidate
-    console.log(`[${candidate.name}] Processing: ${isProcessing}, Completed: ${isCompleted}, Action: ${completedAction}`);
+    // Enhanced debug logging for each candidate
+    console.log(`🔍 [${candidate.name}] ID: ${candidate.id}`);
+    console.log(`🔍 [${candidate.name}] Processing: ${isProcessing}, Completed: ${isCompleted}, Action: ${completedAction}`);
+    console.log(`🔍 [${candidate.name}] CompletedDecisions Map:`, Array.from(completedDecisions.entries()));
+    console.log(`🔍 [${candidate.name}] Has key check:`, completedDecisions.has(candidate.id));
     
     // If decision is already completed, show the completed state
     if (isCompleted && completedAction) {
-      console.log(`[${candidate.name}] Showing completed state for action: ${completedAction}`);
+      console.log(`✅ [${candidate.name}] Showing completed state for action: ${completedAction}`);
       
       const actionConfig = {
         interview: { icon: Mail, label: 'Mail Sent', color: 'bg-blue-100 text-blue-700 border-blue-200' },
@@ -616,6 +644,8 @@ export default function CandidatesPage() {
           </Button>
         </div>
       );
+    } else {
+      console.log(`⚠️ [${candidate.name}] NOT showing completed state - isCompleted: ${isCompleted}, completedAction: ${completedAction}`);
     }
 
     // Check if AI score and recommendation are available

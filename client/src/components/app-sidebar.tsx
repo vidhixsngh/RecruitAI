@@ -32,8 +32,8 @@ const mainMenuItems = [
 
 const actionMenuItems = [
   { title: "AI Analysis", url: "/analysis", icon: Bot },
-  { title: "Schedule Interviews", url: "/schedule", icon: Calendar },
-  { title: "Pre-screen Calls", url: "/prescreen", icon: UserCheck },
+  { title: "Manage Interviews", url: "/schedule", icon: Calendar },
+  { title: "Manage Potential Candidates", url: "/prescreen", icon: UserCheck },
   { title: "Send Emails", url: "/emails", icon: Mail },
 ];
 

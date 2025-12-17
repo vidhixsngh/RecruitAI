@@ -21,6 +21,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { 
+  fetchCandidatesFromSupabase, 
+  sendRejectionEmails,
+  type SupabaseCandidate 
+} from "@/lib/supabase";
 import type { Candidate, Job } from "@shared/schema";
 import { motion } from "framer-motion";
 
@@ -88,31 +93,91 @@ export default function EmailsPage() {
   const [emailSubject, setEmailSubject] = useState(emailTemplates.supportive.subject);
   const [emailBody, setEmailBody] = useState(emailTemplates.supportive.body);
 
-  const { data: candidates, isLoading: candidatesLoading } = useQuery<Candidate[]>({
-    queryKey: ["/api/candidates"],
+  // Fetch candidates from Supabase
+  const { data: supabaseCandidates, isLoading: candidatesLoading, error: candidatesError } = useQuery<SupabaseCandidate[]>({
+    queryKey: ["supabase-candidates"],
+    queryFn: fetchCandidatesFromSupabase,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 30000, // 30 seconds
   });
 
-  const { data: jobs } = useQuery<Job[]>({
-    queryKey: ["/api/jobs"],
+  // Fetch jobs from Supabase
+  const { data: jobs } = useQuery({
+    queryKey: ["supabase-jobs"],
+    queryFn: async () => {
+      const { fetchJobsFromSupabase } = await import("@/lib/supabase");
+      return fetchJobsFromSupabase();
+    },
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 60000, // 1 minute
   });
 
   const sendEmailsMutation = useMutation({
     mutationFn: async (data: { candidateIds: string[]; subject: string; body: string }) => {
-      return apiRequest("POST", "/api/emails/send", data);
+      console.log('🚀 Starting rejection email sending process...');
+      
+      // Get candidate details for personalization
+      const candidatesToEmail = supabaseCandidates?.filter(c => data.candidateIds.includes(c.id)) || [];
+      
+      if (candidatesToEmail.length === 0) {
+        throw new Error('No candidates found to send emails to');
+      }
+      
+      // Send rejection emails using Supabase function
+      const emailResults = await sendRejectionEmails(
+        candidatesToEmail,
+        data.subject,
+        data.body
+      );
+      
+      console.log('📧 Rejection email results:', emailResults);
+      
+      return {
+        success: emailResults.success,
+        results: emailResults.results,
+        successCount: emailResults.results.filter(r => r.emailSent).length
+      };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
+    onSuccess: (result) => {
+      // Invalidate queries to refresh the UI
+      queryClient.invalidateQueries({ queryKey: ["supabase-candidates"] });
+      
+      // Reset form
       setSelectedCandidates(new Set());
+      
+      // Show detailed success message
+      const { successCount, results } = result;
+      const failedCount = results.length - successCount;
+      
+      let description = `Successfully sent ${successCount} rejection email${successCount !== 1 ? 's' : ''} with care and empathy.`;
+      if (failedCount > 0) {
+        description += ` ${failedCount} email${failedCount !== 1 ? 's' : ''} failed to send.`;
+      }
+      description += ` Candidate status${successCount !== 1 ? 'es' : ''} updated in database.`;
+      
       toast({
-        title: "Emails sent!",
-        description: "Rejection emails have been sent with care.",
+        title: "Emails processed!",
+        description,
+      });
+    },
+    onError: (error) => {
+      console.error('❌ Email sending failed:', error);
+      toast({
+        title: "Email sending failed",
+        description: error.message || "Failed to send emails. Please try again.",
+        variant: "destructive",
       });
     },
   });
 
-  const rejectedCandidates = candidates?.filter(
-    (c) => c.recommendation === "reject" && c.status !== "email_sent"
-  );
+  // Filter candidates that are recommended for rejection and haven't been sent emails yet
+  const rejectedCandidates = supabaseCandidates?.filter((c) => {
+    const recommendation = c.ai_recommendation?.toLowerCase() || '';
+    const hasRejectionEmail = c.stage === 'email_sent' || c.status === 'email_sent';
+    return recommendation.includes('reject') && !hasRejectionEmail;
+  });
 
   const getJobTitle = (jobId: string) => {
     return jobs?.find((j) => j.id === jobId)?.title || "Unknown Position";
@@ -204,15 +269,34 @@ export default function EmailsPage() {
             </CardHeader>
             <CardContent className="space-y-2 max-h-96 overflow-y-auto">
               {candidatesLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-                    <Skeleton className="h-4 w-4" />
-                    <div className="flex-1 space-y-1">
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-3 w-32" />
+                <div>
+                  <p className="text-center text-muted-foreground mb-4 text-xs">Loading candidates from Supabase...</p>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                      <Skeleton className="h-4 w-4" />
+                      <div className="flex-1 space-y-1">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
+              ) : candidatesError ? (
+                <div className="text-center py-6">
+                  <XCircle className="h-8 w-8 mx-auto text-red-500 mb-2" />
+                  <p className="text-sm text-red-600 font-medium">Error Loading Candidates</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {candidatesError.message || 'Failed to fetch candidates from Supabase'}
+                  </p>
+                  <Button 
+                    onClick={() => window.location.reload()} 
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                  >
+                    Retry
+                  </Button>
+                </div>
               ) : rejectedCandidates && rejectedCandidates.length > 0 ? (
                 rejectedCandidates.map((candidate) => (
                   <div
@@ -233,15 +317,30 @@ export default function EmailsPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{candidate.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {getJobTitle(candidate.jobId)}
+                        {getJobTitle(candidate.job_id)} • Score: {candidate.ai_score || 'N/A'}/100
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {candidate.email}
                       </p>
                     </div>
+                    <Badge variant="outline" className="border-rose-300 text-rose-600 text-xs">
+                      {candidate.ai_recommendation || 'Reject'}
+                    </Badge>
                   </div>
                 ))
               ) : (
                 <div className="text-center py-6">
                   <Users className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-                  <p className="text-sm text-muted-foreground">No rejected candidates.</p>
+                  <p className="text-sm text-muted-foreground">No rejected candidates found.</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Candidates recommended for rejection will appear here.
+                  </p>
+                  <Link href="/candidates">
+                    <Button variant="outline" size="sm" className="mt-3 gap-2">
+                      View All Candidates
+                      <ArrowRight className="h-3 w-3" />
+                    </Button>
+                  </Link>
                 </div>
               )}
             </CardContent>

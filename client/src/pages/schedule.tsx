@@ -29,6 +29,12 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { 
+  fetchCandidatesFromSupabase, 
+  scheduleInterviewsInSupabase,
+  sendInterviewNotifications,
+  type SupabaseCandidate 
+} from "@/lib/supabase";
 import type { Candidate, Job } from "@shared/schema";
 import { motion } from "framer-motion";
 
@@ -48,7 +54,7 @@ We look forward to speaking with you!
 Best regards,
 HR Team`;
 
-const defaultWhatsAppTemplate = `Hi {name}! 👋
+const defaultTelegramTemplate = `Hi {name}! 👋
 
 Great news! We'd like to invite you for an interview for the {position} position.
 
@@ -70,37 +76,94 @@ export default function SchedulePage() {
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [emailMessage, setEmailMessage] = useState(defaultEmailTemplate);
-  const [whatsAppMessage, setWhatsAppMessage] = useState(defaultWhatsAppTemplate);
+  const [telegramMessage, setTelegramMessage] = useState(defaultTelegramTemplate);
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
 
-  const { data: candidates, isLoading: candidatesLoading } = useQuery<Candidate[]>({
-    queryKey: ["/api/candidates"],
+  // Fetch candidates from Supabase
+  const { data: supabaseCandidates, isLoading: candidatesLoading, error: candidatesError } = useQuery<SupabaseCandidate[]>({
+    queryKey: ["supabase-candidates"],
+    queryFn: fetchCandidatesFromSupabase,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 30000, // 30 seconds
   });
 
-  const { data: jobs } = useQuery<Job[]>({
-    queryKey: ["/api/jobs"],
+  // Fetch jobs from Supabase
+  const { data: jobs } = useQuery({
+    queryKey: ["supabase-jobs"],
+    queryFn: async () => {
+      const { fetchJobsFromSupabase } = await import("@/lib/supabase");
+      return fetchJobsFromSupabase();
+    },
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 60000, // 1 minute
   });
 
   const scheduleInterviewsMutation = useMutation({
-    mutationFn: async (data: { candidateIds: string[]; date: string; time: string; emailMessage: string; whatsAppMessage: string }) => {
-      return apiRequest("POST", "/api/interviews/schedule", data);
+    mutationFn: async (data: { candidateIds: string[]; date: string; time: string; emailMessage: string; telegramMessage: string }) => {
+      console.log('🚀 Starting interview scheduling process...');
+      
+      // Step 1: Update Supabase with interview slots
+      const updatedCandidates = await scheduleInterviewsInSupabase(
+        data.candidateIds,
+        data.date,
+        data.time
+      );
+      
+      console.log('✅ Updated candidates in Supabase:', updatedCandidates.length);
+      
+      // Step 2: Send notifications
+      const notificationResults = await sendInterviewNotifications(
+        updatedCandidates,
+        data.emailMessage,
+        data.telegramMessage,
+        data.date,
+        data.time
+      );
+      
+      console.log('📧 Notification results:', notificationResults);
+      
+      return {
+        success: true,
+        updatedCandidates,
+        notificationResults
+      };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/interviews"] });
+    onSuccess: (result) => {
+      // Invalidate queries to refresh the UI
+      queryClient.invalidateQueries({ queryKey: ["supabase-candidates"] });
+      
+      // Reset form
       setSelectedCandidates(new Set());
       setScheduleDate("");
       setScheduleTime("");
+      
+      // Show success message
+      const successCount = result.notificationResults.results.filter(r => r.emailSent && r.telegramSent).length;
+      const totalCount = result.updatedCandidates.length;
+      
       toast({
         title: "Interviews scheduled!",
-        description: "Great! Interviews scheduled — kudos to team!",
+        description: `Successfully scheduled ${totalCount} interview${totalCount > 1 ? 's' : ''} and sent ${successCount} notification${successCount > 1 ? 's' : ''}.`,
+      });
+    },
+    onError: (error) => {
+      console.error('❌ Interview scheduling failed:', error);
+      toast({
+        title: "Scheduling failed",
+        description: error.message || "Failed to schedule interviews. Please try again.",
+        variant: "destructive",
       });
     },
   });
 
-  const eligibleCandidates = candidates?.filter(
-    (c) => c.recommendation === "interview" && c.status !== "interview_scheduled"
-  );
+  // Filter candidates eligible for interviews (recommended for interview and not already scheduled)
+  const eligibleCandidates = supabaseCandidates?.filter((c) => {
+    const recommendation = c.ai_recommendation?.toLowerCase() || '';
+    const hasInterviewSlot = c.interview_slot && c.interview_slot.trim() !== '';
+    return (recommendation.includes('interview') || recommendation.includes('hire')) && !hasInterviewSlot;
+  });
 
   const getJobTitle = (jobId: string) => {
     return jobs?.find((j) => j.id === jobId)?.title || "Unknown Position";
@@ -147,7 +210,7 @@ export default function SchedulePage() {
       date: scheduleDate,
       time: scheduleTime,
       emailMessage,
-      whatsAppMessage,
+      telegramMessage,
     });
   };
 
@@ -161,10 +224,10 @@ export default function SchedulePage() {
       >
         <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-schedule-title">
           <Calendar className="h-6 w-6 text-primary" />
-          Schedule Interviews
+          Manage Interviews
         </h1>
         <p className="text-muted-foreground mt-1">
-          Select candidates and schedule interviews with automated notifications
+          Schedule interviews for recommended candidates and manage interview slots
         </p>
       </motion.div>
 
@@ -173,8 +236,67 @@ export default function SchedulePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="lg:col-span-2"
+          className="lg:col-span-2 space-y-6"
         >
+          {/* Scheduled Interviews Section */}
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Scheduled Interviews</CardTitle>
+              <CardDescription>
+                Candidates with confirmed interview slots (chronological order)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(() => {
+                const scheduledCandidates = supabaseCandidates?.filter(c => 
+                  c.interview_slot && c.interview_slot.trim() !== ''
+                ).sort((a, b) => {
+                  // Sort by interview_slot chronologically
+                  // Assuming interview_slot format is something like "Dec 20, 2024 at 2:00 PM" or similar
+                  const dateA = new Date(a.interview_slot || '');
+                  const dateB = new Date(b.interview_slot || '');
+                  
+                  // If dates are invalid, fall back to string comparison
+                  if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+                    return (a.interview_slot || '').localeCompare(b.interview_slot || '');
+                  }
+                  
+                  return dateA.getTime() - dateB.getTime();
+                });
+                
+                return scheduledCandidates && scheduledCandidates.length > 0 ? (
+                  scheduledCandidates.map((candidate) => (
+                    <div
+                      key={candidate.id}
+                      className="flex items-center gap-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">
+                        <Calendar className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{candidate.name}</p>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {getJobTitle(candidate.job_id)} • Score: {candidate.ai_score || 'N/A'}/100
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                          {candidate.interview_slot}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Scheduled</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6">
+                    <Calendar className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                    <p className="text-sm text-muted-foreground">No interviews scheduled yet.</p>
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -201,17 +323,35 @@ export default function SchedulePage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {candidatesLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-4 p-4 rounded-lg bg-muted/30">
-                    <Skeleton className="h-5 w-5" />
-                    <Skeleton className="h-10 w-10 rounded-full" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-3 w-48" />
+                <div>
+                  <p className="text-center text-muted-foreground mb-4">Loading candidates from Supabase...</p>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-4 p-4 rounded-lg bg-muted/30">
+                      <Skeleton className="h-5 w-5" />
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-48" />
+                      </div>
+                      <Skeleton className="h-6 w-16" />
                     </div>
-                    <Skeleton className="h-6 w-16" />
-                  </div>
-                ))
+                  ))}
+                </div>
+              ) : candidatesError ? (
+                <div className="text-center py-8">
+                  <Users className="h-10 w-10 mx-auto text-red-500 mb-3" />
+                  <p className="text-red-600 font-medium">Error Loading Candidates</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {candidatesError.message || 'Failed to fetch candidates from Supabase'}
+                  </p>
+                  <Button 
+                    onClick={() => window.location.reload()} 
+                    variant="outline"
+                    className="mt-4"
+                  >
+                    Retry
+                  </Button>
+                </div>
               ) : eligibleCandidates && eligibleCandidates.length > 0 ? (
                 eligibleCandidates.map((candidate) => (
                   <div
@@ -235,15 +375,17 @@ export default function SchedulePage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{candidate.name}</p>
                       <p className="text-sm text-muted-foreground truncate">
-                        {getJobTitle(candidate.jobId)} • Score: {candidate.resumeScore}/100
+                        {getJobTitle(candidate.job_id)} • Score: {candidate.ai_score || 'N/A'}/100
                       </p>
                     </div>
                     <div className="flex items-center gap-3 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <Mail className="h-4 w-4" />
+                        <span className="text-xs">{candidate.email}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Phone className="h-4 w-4" />
+                        <span className="text-xs">{candidate.phone}</span>
                       </div>
                     </div>
                   </div>
@@ -253,11 +395,11 @@ export default function SchedulePage() {
                   <Users className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
                   <p className="text-muted-foreground">No candidates eligible for scheduling.</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Run AI screening to get interview recommendations.
+                    Candidates recommended for interviews will appear here.
                   </p>
-                  <Link href="/jobs">
+                  <Link href="/candidates">
                     <Button variant="outline" className="mt-4 gap-2">
-                      Go to Job Openings
+                      View All Candidates
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>
@@ -316,9 +458,9 @@ export default function SchedulePage() {
                     <Mail className="h-4 w-4" />
                     Email
                   </TabsTrigger>
-                  <TabsTrigger value="whatsapp" className="flex-1 gap-1" data-testid="tab-whatsapp">
+                  <TabsTrigger value="telegram" className="flex-1 gap-1" data-testid="tab-telegram">
                     <Phone className="h-4 w-4" />
-                    WhatsApp
+                    Telegram
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="email" className="mt-4">
@@ -332,14 +474,14 @@ export default function SchedulePage() {
                     />
                   </div>
                 </TabsContent>
-                <TabsContent value="whatsapp" className="mt-4">
+                <TabsContent value="telegram" className="mt-4">
                   <div className="space-y-2">
-                    <Label>WhatsApp Message</Label>
+                    <Label>Telegram Message</Label>
                     <Textarea
-                      value={whatsAppMessage}
-                      onChange={(e) => setWhatsAppMessage(e.target.value)}
+                      value={telegramMessage}
+                      onChange={(e) => setTelegramMessage(e.target.value)}
                       className="min-h-40 text-sm"
-                      data-testid="input-whatsapp-message"
+                      data-testid="input-telegram-message"
                     />
                   </div>
                 </TabsContent>
@@ -354,12 +496,12 @@ export default function SchedulePage() {
                 {scheduleInterviewsMutation.isPending ? (
                   <>
                     <span className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                    Scheduling...
+                    Scheduling & Sending Notifications...
                   </>
                 ) : (
                   <>
                     <Send className="h-4 w-4" />
-                    Schedule {selectedCandidates.size > 0 ? `(${selectedCandidates.size})` : ""} Interviews
+                    Schedule {selectedCandidates.size > 0 ? `(${selectedCandidates.size})` : ""} Interview{selectedCandidates.size !== 1 ? 's' : ''}
                   </>
                 )}
               </Button>
