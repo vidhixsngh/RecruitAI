@@ -6,7 +6,7 @@ import {
   type EmailTemplate, type InsertEmailTemplate 
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-
+// check 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
