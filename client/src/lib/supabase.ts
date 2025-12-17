@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = 'https://ylwlgahsilakiuyrxwfp.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlsd2xnYWhzaWxha2l1eXJ4d2ZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3MzAxMTEsImV4cCI6MjA4MTMwNjExMX0.INLijZaRQtTG0LEDhW4HKPo09RKp4EW0lYCmHWRn6I0'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables. Please check your .env file.')
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
@@ -10,6 +14,7 @@ export interface SupabaseCandidate {
   id: string
   created_at: string
   job_id: string
+  user_id: string
   ai_score: number | null
   phone: string
   resume_text: string
@@ -127,6 +132,7 @@ export async function fetchCandidatesFromSupabase(): Promise<SupabaseCandidate[]
 export interface SupabaseJob {
   id: string
   created_at: string
+  user_id: string
   title: string
   description_text: string
   department: string
@@ -151,9 +157,15 @@ export async function createJobInSupabase(job: InsertJob): Promise<SupabaseJob> 
   try {
     console.log('Creating job in Supabase:', job)
     
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      throw new Error('User must be authenticated to create jobs')
+    }
+    
     const { data, error } = await supabase
       .from('jobs')
-      .insert([job])
+      .insert([{ ...job, user_id: user.id }])
       .select()
       .single()
 

@@ -9,6 +9,7 @@ import {
   Mail,
   UserCheck,
   BarChart3,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -45,7 +46,7 @@ const settingsItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const getInitials = (name: string) => {
     return name
@@ -147,7 +148,7 @@ export function AppSidebar() {
               {user?.username ? getInitials(user.username) : "HR"}
             </AvatarFallback>
           </Avatar>
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 flex-1">
             <span className="text-sm font-medium truncate" data-testid="text-user-name">
               {user?.username || "HR Manager"}
             </span>
@@ -155,6 +156,17 @@ export function AppSidebar() {
               {user?.role || "Admin"}
             </span>
           </div>
+          <button
+            onClick={async () => {
+              await logout();
+              window.location.href = "/";
+            }}
+            className="p-2 hover:bg-sidebar-accent rounded-md transition-colors"
+            title="Sign Out"
+            data-testid="button-signout"
+          >
+            <LogOut className="h-4 w-4 text-muted-foreground" />
+          </button>
         </div>
       </SidebarFooter>
     </Sidebar>

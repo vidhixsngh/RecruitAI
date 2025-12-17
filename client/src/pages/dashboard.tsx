@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -12,12 +13,21 @@ import {
   Plus,
   Bot,
   BarChart3,
+  HelpCircle,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { fetchCandidatesFromSupabase, fetchJobsFromSupabase, type SupabaseCandidate, type SupabaseJob } from "@/lib/supabase";
 import { motion } from "framer-motion";
@@ -55,6 +65,7 @@ const statsCards = [
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const [showTutorial, setShowTutorial] = useState(false);
 
   // Fetch jobs from Supabase
   const { data: jobs, isLoading: jobsLoading } = useQuery<SupabaseJob[]>({
@@ -116,7 +127,19 @@ export default function DashboardPage() {
             transition={{ duration: 0.6 }}
             className="max-w-7xl mx-auto"
           >
-            <div className="text-center mb-8">
+            <div className="text-center mb-8 relative">
+              <div className="absolute top-0 right-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowTutorial(true)}
+                  className="gap-2 shadow-md hover:shadow-lg transition-all"
+                  data-testid="button-tutorial"
+                >
+                  <HelpCircle className="h-4 w-4" />
+                  Quick Tutorial
+                </Button>
+              </div>
               <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-slate-900 via-blue-800 to-emerald-800 dark:bg-gradient-to-r dark:from-white dark:via-gray-200 dark:to-slate-300 bg-clip-text text-transparent mb-4" data-testid="text-dashboard-title">
                 Welcome back, {user?.username?.split(" ")[0] || "there"}! 👨‍💻
               </h1>
@@ -455,6 +478,146 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Tutorial Dialog */}
+      <Dialog open={showTutorial} onOpenChange={setShowTutorial}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl flex items-center gap-2">
+              <HelpCircle className="h-6 w-6 text-primary" />
+              Quick Tutorial - How to Use Recruit AI
+            </DialogTitle>
+            <DialogDescription>
+              Learn how to navigate and use the platform effectively
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Step 1 */}
+            <div className="space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 font-semibold">
+                  1
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg mb-1">Create Job Openings</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Start by posting your job openings. Click <strong>"Add New Job"</strong> or navigate to <strong>Job Openings</strong> in the sidebar.
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Briefcase className="h-4 w-4" />
+                    <span>Sidebar → Job Openings → Create Job</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-300 font-semibold">
+                  2
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg mb-1">Receive Applications</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Share your job application link with candidates. Each job has a unique public URL that candidates can use to apply.
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Users className="h-4 w-4" />
+                    <span>Applications appear in the Candidates tab</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900 text-violet-600 dark:text-violet-300 font-semibold">
+                  3
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg mb-1">AI Analysis & Screening</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Our AI automatically analyzes resumes, scores candidates, and provides recommendations. View detailed insights in <strong>AI Analysis</strong>.
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Bot className="h-4 w-4" />
+                    <span>Sidebar → AI Analysis</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 4 */}
+            <div className="space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900 text-amber-600 dark:text-amber-300 font-semibold">
+                  4
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg mb-1">Schedule Interviews</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Select top candidates and schedule interviews. Use <strong>Manage Interviews</strong> to coordinate timing and send invitations.
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Calendar className="h-4 w-4" />
+                    <span>Sidebar → Manage Interviews</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 5 */}
+            <div className="space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-900 text-rose-600 dark:text-rose-300 font-semibold">
+                  5
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg mb-1">Track & Analyze</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Monitor your hiring pipeline with <strong>Hiring Analytics</strong>. View metrics, trends, and make data-driven decisions.
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <BarChart3 className="h-4 w-4" />
+                    <span>Sidebar → Hiring Analytics</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Pro Tips */}
+            <div className="border-t pt-4 mt-6">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Pro Tips
+              </h3>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                  <span>Use the <strong>Kanban view</strong> in Candidates to visualize your pipeline stages</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                  <span>Send bulk emails to candidates using the <strong>Send Emails</strong> feature</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                  <span>Check <strong>Hiring Analytics</strong> regularly to identify bottlenecks</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4 border-t">
+            <Button onClick={() => setShowTutorial(false)}>
+              Got it, thanks!
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

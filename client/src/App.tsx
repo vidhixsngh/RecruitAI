@@ -1,3 +1,4 @@
+import React from "react";
 import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -21,6 +22,7 @@ import CandidatesPage from "@/pages/candidates";
 import HiringAnalyticsPage from "@/pages/hiring-analytics";
 import SettingsPage from "@/pages/settings";
 import ApplyPage from "@/pages/apply";
+import OnboardingPage from "@/pages/onboarding";
 import { AnimatePresence, motion } from "framer-motion";
 
 function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
@@ -68,10 +70,59 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 function Router() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const [location] = useLocation();
+  const [oauthTimeout, setOauthTimeout] = React.useState(false);
 
-  if (!isAuthenticated && location !== "/") {
+  // Check if we're handling an OAuth callback
+  const isOAuthCallback = window.location.hash.includes('access_token') || 
+                          window.location.search.includes('code=') ||
+                          window.location.hash.includes('error');
+
+  // Add timeout for OAuth callback
+  React.useEffect(() => {
+    if (isOAuthCallback && !isAuthenticated) {
+      console.log('🔄 OAuth callback detected, waiting for session...');
+      console.log('📍 Current URL:', window.location.href);
+      console.log('🔗 Hash:', window.location.hash);
+      console.log('🔗 Search:', window.location.search);
+      
+      const timer = setTimeout(() => {
+        console.log('⏰ OAuth callback timeout - redirecting to login');
+        setOauthTimeout(true);
+      }, 5000); // 5 second timeout
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isOAuthCallback, isAuthenticated]);
+
+  // If OAuth callback times out, redirect to login
+  if (oauthTimeout && !isAuthenticated) {
+    console.log('❌ OAuth failed, redirecting to login');
+    window.location.href = '/';
+    return null;
+  }
+
+  // Show loading state while checking authentication or handling OAuth
+  if (isLoading || (isOAuthCallback && !isAuthenticated)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <div className="h-12 w-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground">
+            {isOAuthCallback ? 'Completing sign-in...' : 'Loading...'}
+          </p>
+          {isOAuthCallback && (
+            <p className="text-xs text-muted-foreground">
+              Processing authentication...
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated && location !== "/" && !location.startsWith("/apply/")) {
     return <Redirect to="/" />;
   }
 
@@ -83,6 +134,11 @@ function Router() {
     <Switch>
       <Route path="/" component={LoginPage} />
       <Route path="/apply/:jobId" component={ApplyPage} />
+      <Route path="/onboarding">
+        <AppLayout>
+          <ProtectedRoute component={OnboardingPage} />
+        </AppLayout>
+      </Route>
       <Route path="/dashboard">
         <AppLayout>
           <ProtectedRoute component={DashboardPage} />
