@@ -18,6 +18,7 @@ import SchedulePage from "@/pages/schedule";
 import PrescreenPage from "@/pages/prescreen";
 import EmailsPage from "@/pages/emails";
 import CandidatesPage from "@/pages/candidates";
+import HiringAnalyticsPage from "@/pages/hiring-analytics";
 import SettingsPage from "@/pages/settings";
 import ApplyPage from "@/pages/apply";
 import { AnimatePresence, motion } from "framer-motion";
@@ -120,6 +121,11 @@ function Router() {
       <Route path="/candidates">
         <AppLayout>
           <ProtectedRoute component={CandidatesPage} />
+        </AppLayout>
+      </Route>
+      <Route path="/hiring-analytics">
+        <AppLayout>
+          <ProtectedRoute component={HiringAnalyticsPage} />
         </AppLayout>
       </Route>
       <Route path="/settings">

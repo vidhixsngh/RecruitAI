@@ -159,32 +159,32 @@ const KANBAN_COLUMNS = [
     id: 'new',
     title: 'New Applications',
     status: ['new', 'pending', 'applied'],
-    color: 'bg-blue-50 border-blue-200',
-    headerColor: 'bg-blue-100 text-blue-800',
+    color: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50',
+    headerColor: 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200',
     count: 0
   },
   {
     id: 'screened',
     title: 'AI Screened',
     status: ['screened', 'reviewed', 'analyzed'],
-    color: 'bg-purple-50 border-purple-200',
-    headerColor: 'bg-purple-100 text-purple-800',
+    color: 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800/50',
+    headerColor: 'bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200',
     count: 0
   },
   {
     id: 'interview_scheduled',
     title: 'Interview Scheduled',
     status: ['interview_scheduled', 'prescreen_scheduled'],
-    color: 'bg-green-50 border-green-200',
-    headerColor: 'bg-green-100 text-green-800',
+    color: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/50',
+    headerColor: 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200',
     count: 0
   },
   {
     id: 'completed',
     title: 'Process Complete',
     status: ['email_sent', 'rejected', 'hired'],
-    color: 'bg-gray-50 border-gray-200',
-    headerColor: 'bg-gray-100 text-gray-800',
+    color: 'bg-slate-50 dark:bg-slate-950/30 border-slate-200 dark:border-slate-700/50',
+    headerColor: 'bg-slate-100 dark:bg-slate-800/50 text-slate-800 dark:text-slate-200',
     count: 0
   }
 ];
@@ -1444,7 +1444,7 @@ export default function CandidatesPage() {
                             transition={{ duration: 0.2 }}
                           >
                             <Card
-                              className="cursor-pointer hover:shadow-md transition-shadow bg-white border border-slate-200"
+                              className="cursor-pointer hover:shadow-md transition-shadow bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
                               onClick={() => openCandidateDetails(candidate.id)}
                             >
                               <CardContent className="p-4">
@@ -1457,7 +1457,7 @@ export default function CandidatesPage() {
                                       {getJobTitle(candidate.job_id)}
                                     </p>
                                   </div>
-                                  <Eye className="h-4 w-4 text-slate-400 hover:text-slate-600 cursor-pointer" />
+                                  <Eye className="h-4 w-4 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-pointer" />
                                 </div>
 
                                 {/* AI Score Badge */}

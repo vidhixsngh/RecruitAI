@@ -8,6 +8,7 @@ import {
   Bot,
   Mail,
   UserCheck,
+  BarChart3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -28,6 +29,7 @@ const mainMenuItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Job Openings", url: "/jobs", icon: Briefcase },
   { title: "Candidates", url: "/candidates", icon: Users },
+  { title: "Hiring Analytics", url: "/hiring-analytics", icon: BarChart3 },
 ];
 
 const actionMenuItems = [
