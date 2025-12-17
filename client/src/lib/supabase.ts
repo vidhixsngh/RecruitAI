@@ -215,6 +215,8 @@ export async function fetchJobByIdFromSupabase(jobId: string): Promise<SupabaseJ
   }
 }
 
+
+
 // Function to delete a candidate from Supabase
 export async function deleteCandidateFromSupabase(candidateId: string): Promise<void> {
   try {

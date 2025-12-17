@@ -29,8 +29,10 @@ import {
   X,
   Briefcase,
   Trash2,
+  List,
+  LayoutGrid,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,6 +67,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
 import type { Job } from "@shared/schema";
 import { motion } from "framer-motion";
 import { fetchCandidatesFromSupabase, testSupabaseConnection, deleteCandidateFromSupabase, type SupabaseCandidate } from "@/lib/supabase";
@@ -150,11 +153,48 @@ const recommendationConfig = {
   },
 };
 
+// Kanban column definitions based on actual stages used in the system
+const KANBAN_COLUMNS = [
+  {
+    id: 'new',
+    title: 'New Applications',
+    status: ['new', 'pending', 'applied'],
+    color: 'bg-blue-50 border-blue-200',
+    headerColor: 'bg-blue-100 text-blue-800',
+    count: 0
+  },
+  {
+    id: 'screened',
+    title: 'AI Screened',
+    status: ['screened', 'reviewed', 'analyzed'],
+    color: 'bg-purple-50 border-purple-200',
+    headerColor: 'bg-purple-100 text-purple-800',
+    count: 0
+  },
+  {
+    id: 'interview_scheduled',
+    title: 'Interview Scheduled',
+    status: ['interview_scheduled', 'prescreen_scheduled'],
+    color: 'bg-green-50 border-green-200',
+    headerColor: 'bg-green-100 text-green-800',
+    count: 0
+  },
+  {
+    id: 'completed',
+    title: 'Process Complete',
+    status: ['email_sent', 'rejected', 'hired'],
+    color: 'bg-gray-50 border-gray-200',
+    headerColor: 'bg-gray-100 text-gray-800',
+    count: 0
+  }
+];
+
 export default function CandidatesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [processingDecisions, setProcessingDecisions] = useState<Set<string>>(new Set());
   const [completedDecisions, setCompletedDecisions] = useState<Map<string, string>>(() => {
     // Load completed decisions from localStorage on component mount
@@ -210,6 +250,37 @@ export default function CandidatesPage() {
   const getJobTitle = (jobId: string) => {
     return jobs?.find((j) => j.id === jobId)?.title || "Unknown Position";
   };
+
+  // Kanban helper functions
+  const getScoreColor = (score: number | null) => {
+    if (!score) return "text-gray-500";
+    if (score >= 80) return "text-emerald-600";
+    if (score >= 60) return "text-amber-600";
+    return "text-rose-600";
+  };
+
+  const getScoreBg = (score: number | null) => {
+    if (!score) return "bg-gray-100";
+    if (score >= 80) return "bg-emerald-100";
+    if (score >= 60) return "bg-amber-100";
+    return "bg-rose-100";
+  };
+
+  // Group candidates by stage for Kanban view
+  const groupedCandidates = React.useMemo(() => {
+    if (!supabaseCandidates) return {};
+
+    const groups: { [key: string]: SupabaseCandidate[] } = {};
+    
+    KANBAN_COLUMNS.forEach(column => {
+      groups[column.id] = supabaseCandidates.filter(candidate => {
+        const candidateStage = candidate.stage?.toLowerCase() || 'new';
+        return column.status.some(status => candidateStage.includes(status));
+      });
+    });
+
+    return groups;
+  }, [supabaseCandidates]);
 
   // SIMPLIFIED ACTION-BASED FILTERING
   const filteredCandidates = React.useMemo(() => {
@@ -302,7 +373,7 @@ export default function CandidatesPage() {
     if (stored && completedDecisions.size === 0) {
       try {
         const parsed = JSON.parse(stored);
-        const newMap = new Map(Object.entries(parsed));
+        const newMap = new Map(Object.entries(parsed) as [string, string][]);
         console.log('🔄 Reloading from localStorage due to mismatch');
         setCompletedDecisions(newMap);
       } catch (error) {
@@ -992,15 +1063,42 @@ export default function CandidatesPage() {
         transition={{ duration: 0.3 }}
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-candidates-title">
-            <Users className="h-6 w-6 text-primary" />
-            All Candidates
-          </h1>
-          <p className="text-muted-foreground mt-1">
+        <div className="flex-1">
+          <div className="flex items-center gap-6 mb-2">
+            <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-candidates-title">
+              <Users className="h-6 w-6 text-primary" />
+              All Candidates
+            </h1>
+            
+            {/* Elegant View Toggle */}
+            <div className="flex items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 rounded-full p-1 shadow-sm">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  viewMode === "list"
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                }`}
+              >
+                <List className="h-4 w-4" />
+                List
+              </button>
+              <button
+                onClick={() => setViewMode("kanban")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  viewMode === "kanban"
+                    ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                }`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+                Kanban
+              </button>
+            </div>
+          </div>
+          <p className="text-muted-foreground">
             Real-time tracking of all candidate applications and statuses
           </p>
-
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={handleExport} data-testid="button-export">
@@ -1058,11 +1156,12 @@ export default function CandidatesPage() {
         </div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.1 }}
-      >
+      {viewMode === "list" ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+        >
         <Card>
           <CardContent className="p-0">
             {candidatesLoading ? (
@@ -1277,6 +1376,142 @@ export default function CandidatesPage() {
           </CardContent>
         </Card>
       </motion.div>
+      ) : (
+        /* Kanban View */
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+        >
+          {candidatesLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {KANBAN_COLUMNS.map((column) => (
+                <Card key={column.id} className={`${column.color} border-2`}>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center justify-between">
+                      <span>{column.title}</span>
+                      <Skeleton className="h-6 w-8" />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-32 w-full" />
+                    ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : candidatesError ? (
+            <div className="text-center py-12">
+              <Users className="h-12 w-12 mx-auto text-red-500 mb-4" />
+              <h3 className="text-lg font-semibold mb-2 text-red-600">Error Loading Candidates</h3>
+              <p className="text-muted-foreground mb-4">
+                {candidatesError.message || 'Failed to fetch candidates from Supabase'}
+              </p>
+              <Button onClick={() => window.location.reload()} variant="outline">
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {KANBAN_COLUMNS.map((column) => {
+                const columnCandidates = groupedCandidates[column.id] || [];
+                
+                return (
+                  <motion.div
+                    key={column.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: KANBAN_COLUMNS.indexOf(column) * 0.1 }}
+                  >
+                    <Card className={`${column.color} border-2 min-h-[600px]`}>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center justify-between">
+                          <span>{column.title}</span>
+                          <Badge className={column.headerColor}>
+                            {columnCandidates.length}
+                          </Badge>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {columnCandidates.map((candidate) => (
+                          <motion.div
+                            key={candidate.id}
+                            layout
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <Card
+                              className="cursor-pointer hover:shadow-md transition-shadow bg-white border border-slate-200"
+                              onClick={() => openCandidateDetails(candidate.id)}
+                            >
+                              <CardContent className="p-4">
+                                <div className="flex items-start justify-between mb-3">
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-semibold text-sm truncate">
+                                      {candidate.name}
+                                    </h4>
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {getJobTitle(candidate.job_id)}
+                                    </p>
+                                  </div>
+                                  <Eye className="h-4 w-4 text-slate-400 hover:text-slate-600 cursor-pointer" />
+                                </div>
+
+                                {/* AI Score Badge */}
+                                {candidate.ai_score && (
+                                  <div className="flex items-center justify-between mb-2">
+                                    <Badge 
+                                      className={`text-xs ${getScoreBg(candidate.ai_score)} ${getScoreColor(candidate.ai_score)} border-0`}
+                                    >
+                                      Score: {candidate.ai_score}/100
+                                    </Badge>
+                                    {candidate.ai_recommendation && (
+                                      <Badge variant="outline" className="text-xs">
+                                        {candidate.ai_recommendation}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* AI Summary Snippet */}
+                                {candidate.ai_summary && (
+                                  <p className="text-xs text-muted-foreground leading-relaxed overflow-hidden" style={{ 
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical'
+                                  }}>
+                                    {candidate.ai_summary}
+                                  </p>
+                                )}
+
+                                {/* Contact Info */}
+                                <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                                  <Mail className="h-3 w-3" />
+                                  <span className="truncate">{candidate.email}</span>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        ))}
+                        
+                        {columnCandidates.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No candidates in this stage</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {supabaseCandidates && (
         <div className="space-y-2">
