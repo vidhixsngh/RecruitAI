@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Plus,
   Bot,
+  BarChart3,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -117,7 +118,7 @@ export default function DashboardPage() {
           >
             <div className="text-center mb-8">
               <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-slate-900 via-blue-800 to-emerald-800 dark:bg-gradient-to-r dark:from-white dark:via-gray-200 dark:to-slate-300 bg-clip-text text-transparent mb-4" data-testid="text-dashboard-title">
-                Welcome back, {user?.username?.split(" ")[0] || "there"}! 👋
+                Welcome back, {user?.username?.split(" ")[0] || "there"}! 👨‍💻
               </h1>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
                 Your AI-powered hiring command center. Track, analyze, and optimize your recruitment pipeline.
@@ -138,10 +139,10 @@ export default function DashboardPage() {
                   View Candidates
                 </Button>
               </Link>
-              <Link href="/analysis">
+              <Link href="/hiring-analytics">
                 <Button variant="outline" size="lg" className="gap-2 shadow-lg hover:shadow-xl transition-all duration-300">
-                  <Bot className="h-5 w-5" />
-                  AI Analysis
+                  <BarChart3 className="h-5 w-5" />
+                  Analytics
                 </Button>
               </Link>
             </div>
@@ -418,33 +419,33 @@ export default function DashboardPage() {
               </Card>
             </motion.div>
 
-            {/* AI Insights */}
+            {/* Hiring Analytics */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.7 }}
             >
-              <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 to-indigo-100/50 dark:bg-gradient-to-br dark:from-gray-900/80 dark:to-black/60 border-blue-200/50 dark:border-gray-700/50">
+              <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-50 to-teal-100/50 dark:bg-gradient-to-br dark:from-emerald-950/30 dark:to-teal-950/20 border-emerald-200/50 dark:border-emerald-700/50">
                 <CardContent className="p-6 text-center">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                    <Bot className="h-8 w-8 text-white" />
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                    <BarChart3 className="h-8 w-8 text-white" />
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">AI-Powered Insights</h3>
+                  <h3 className="text-lg font-semibold mb-2">Hiring Analytics</h3>
                   <p className="text-sm text-muted-foreground mb-6">
-                    Get intelligent recommendations and automated screening for all your candidates
+                    Executive insights and pipeline performance metrics for data-driven decisions
                   </p>
                   {candidates && candidates.length > 0 ? (
-                    <Link href="/analysis">
-                      <Button className="gap-2 shadow-lg" data-testid="button-view-analysis">
-                        <Bot className="h-4 w-4" />
-                        View AI Analysis
+                    <Link href="/hiring-analytics">
+                      <Button className="gap-2 shadow-lg bg-emerald-600 hover:bg-emerald-700" data-testid="button-view-analytics">
+                        <BarChart3 className="h-4 w-4" />
+                        View Analytics Dashboard
                       </Button>
                     </Link>
                   ) : (
                     <Link href="/jobs">
-                      <Button className="gap-2 shadow-lg" data-testid="button-start-screening">
+                      <Button className="gap-2 shadow-lg bg-emerald-600 hover:bg-emerald-700" data-testid="button-start-hiring">
                         <Plus className="h-4 w-4" />
-                        Create First Job
+                        Start Hiring Process
                       </Button>
                     </Link>
                   )}

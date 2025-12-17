@@ -299,9 +299,24 @@ export default function CandidatesPage() {
         return matchesSearch;
       }
       
-      // Check if decision was already made (completed actions)
-      const isCompleted = completedDecisions.has(candidate.id);
-      const completedAction = completedDecisions.get(candidate.id);
+      // Check if decision was already made (database state first, then localStorage)
+      const hasInterviewScheduled = candidate.interview_slot !== null && candidate.interview_slot !== '';
+      const stageIndicatesEmailSent = candidate.stage?.toLowerCase().includes('email_sent') || 
+                                     candidate.stage?.toLowerCase().includes('interview_scheduled') ||
+                                     candidate.status?.toLowerCase().includes('email_sent') ||
+                                     candidate.status?.toLowerCase().includes('interview_scheduled');
+      
+      const isCompletedInStorage = completedDecisions.has(candidate.id);
+      const completedActionInStorage = completedDecisions.get(candidate.id);
+      
+      const isCompleted = hasInterviewScheduled || stageIndicatesEmailSent || isCompletedInStorage;
+      let completedAction = '';
+      
+      if (hasInterviewScheduled || stageIndicatesEmailSent) {
+        completedAction = 'interview';
+      } else if (isCompletedInStorage) {
+        completedAction = completedActionInStorage || '';
+      }
       
       let matchesAction = false;
       
@@ -676,14 +691,34 @@ export default function CandidatesPage() {
   // Function to determine which buttons to show based on AI recommendation and score
   const getActionButtons = (candidate: SupabaseCandidate) => {
     const isProcessing = processingDecisions.has(candidate.id);
-    const isCompleted = completedDecisions.has(candidate.id);
-    const completedAction = completedDecisions.get(candidate.id);
+    
+    // Check database state first for completed actions
+    const hasInterviewScheduled = candidate.interview_slot !== null && candidate.interview_slot !== '';
+    const stageIndicatesEmailSent = candidate.stage?.toLowerCase().includes('email_sent') || 
+                                   candidate.stage?.toLowerCase().includes('interview_scheduled') ||
+                                   candidate.status?.toLowerCase().includes('email_sent') ||
+                                   candidate.status?.toLowerCase().includes('interview_scheduled');
+    
+    // Check localStorage as backup
+    const isCompletedInStorage = completedDecisions.has(candidate.id);
+    const completedActionInStorage = completedDecisions.get(candidate.id);
+    
+    // Determine if action is completed (database state takes priority)
+    const isCompleted = hasInterviewScheduled || stageIndicatesEmailSent || isCompletedInStorage;
+    let completedAction = '';
+    
+    if (hasInterviewScheduled || stageIndicatesEmailSent) {
+      completedAction = 'interview'; // Default to interview if database indicates email sent
+    } else if (isCompletedInStorage) {
+      completedAction = completedActionInStorage || '';
+    }
     
     // Enhanced debug logging for each candidate
     console.log(`🔍 [${candidate.name}] ID: ${candidate.id}`);
+    console.log(`🔍 [${candidate.name}] Interview Slot: ${candidate.interview_slot}`);
+    console.log(`🔍 [${candidate.name}] Stage: ${candidate.stage}, Status: ${candidate.status}`);
+    console.log(`🔍 [${candidate.name}] DB indicates completed: ${hasInterviewScheduled || stageIndicatesEmailSent}`);
     console.log(`🔍 [${candidate.name}] Processing: ${isProcessing}, Completed: ${isCompleted}, Action: ${completedAction}`);
-    console.log(`🔍 [${candidate.name}] CompletedDecisions Map:`, Array.from(completedDecisions.entries()));
-    console.log(`🔍 [${candidate.name}] Has key check:`, completedDecisions.has(candidate.id));
     
     // If decision is already completed, show the completed state
     if (isCompleted && completedAction) {
@@ -1008,7 +1043,17 @@ export default function CandidatesPage() {
                 Close
               </Button>
               
-              {!completedDecisions.has(selectedCandidate.id) && (
+              {(() => {
+                const hasInterviewScheduled = selectedCandidate.interview_slot !== null && selectedCandidate.interview_slot !== '';
+                const stageIndicatesEmailSent = selectedCandidate.stage?.toLowerCase().includes('email_sent') || 
+                                               selectedCandidate.stage?.toLowerCase().includes('interview_scheduled') ||
+                                               selectedCandidate.status?.toLowerCase().includes('email_sent') ||
+                                               selectedCandidate.status?.toLowerCase().includes('interview_scheduled');
+                const isCompletedInStorage = completedDecisions.has(selectedCandidate.id);
+                const isCompleted = hasInterviewScheduled || stageIndicatesEmailSent || isCompletedInStorage;
+                
+                return !isCompleted;
+              })() && (
                 <div className="flex gap-2">
                   <Button
                     onClick={() => {
