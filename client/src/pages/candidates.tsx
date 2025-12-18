@@ -1297,6 +1297,9 @@ export default function CandidatesPage() {
                                 <Mail className="h-3 w-3" />
                                 <span>{candidate.email}</span>
                               </div>
+                              <div className="text-xs text-blue-600 font-mono mt-1">
+                                ID: {candidate.id.slice(-8)}
+                              </div>
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground">
@@ -1500,6 +1503,9 @@ export default function CandidatesPage() {
                                     </h4>
                                     <p className="text-xs text-muted-foreground truncate">
                                       {getJobTitle(candidate.job_id)}
+                                    </p>
+                                    <p className="text-xs text-blue-600 font-mono">
+                                      ID: {candidate.id.slice(-8)}
                                     </p>
                                   </div>
                                   <Eye className="h-4 w-4 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-pointer" />
