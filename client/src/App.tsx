@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/lib/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
+import LandingPage from "@/pages/landing";
 import DashboardPage from "@/pages/dashboard";
 import JobsPage from "@/pages/jobs";
 import JobDetailsPage from "@/pages/job-details";
@@ -132,7 +133,8 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/" component={LoginPage} />
+      <Route path="/" component={LandingPage} />
+      <Route path="/login" component={LoginPage} />
       <Route path="/apply/:jobId" component={ApplyPage} />
       <Route path="/onboarding">
         <AppLayout>
