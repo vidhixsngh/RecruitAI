@@ -266,21 +266,21 @@ export default function CandidatesPage() {
     return "bg-rose-100";
   };
 
-  // Group candidates by stage for Kanban view
+  // Group candidates by stage for Kanban view - use same filtering as List view
   const groupedCandidates = React.useMemo(() => {
-    if (!supabaseCandidates) return {};
+    if (!filteredCandidates) return {};
 
     const groups: { [key: string]: SupabaseCandidate[] } = {};
     
     KANBAN_COLUMNS.forEach(column => {
-      groups[column.id] = supabaseCandidates.filter(candidate => {
+      groups[column.id] = filteredCandidates.filter(candidate => {
         const candidateStage = candidate.stage?.toLowerCase() || 'new';
         return column.status.some(status => candidateStage.includes(status));
       });
     });
 
     return groups;
-  }, [supabaseCandidates]);
+  }, [filteredCandidates]);
 
   // SIMPLIFIED ACTION-BASED FILTERING
   const filteredCandidates = React.useMemo(() => {
