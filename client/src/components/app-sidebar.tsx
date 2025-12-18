@@ -28,7 +28,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const mainMenuItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Job Openings", url: "/jobs", icon: Briefcase },
+  { title: "Create Job Forms", url: "/jobs", icon: Briefcase },
   { title: "Candidates", url: "/candidates", icon: Users },
   { title: "Hiring Analytics", url: "/hiring-analytics", icon: BarChart3 },
 ];
