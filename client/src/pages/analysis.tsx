@@ -582,9 +582,9 @@ export default function AnalysisPage() {
           <Card className="text-center py-12">
             <CardContent>
               <Bot className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No candidates analyzed yet</h3>
+              <h3 className="text-lg font-semibold mb-2">Ready to analyze candidates with AI!</h3>
               <p className="text-muted-foreground mb-6">
-                Start by screening resumes for your job openings.
+                Post your first job to see the magic happen - AI will provide detailed analysis and recommendations.
               </p>
               <Link href="/jobs">
                 <Button className="gap-2" data-testid="button-go-to-jobs">

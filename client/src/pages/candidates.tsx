@@ -1469,9 +1469,9 @@ export default function CandidatesPage() {
             ) : (
               <div className="text-center py-12">
                 <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No applications yet</h3>
+                <h3 className="text-lg font-semibold mb-2">Ready to screen candidates with AI!</h3>
                 <p className="text-muted-foreground mb-6">
-                  No candidates found in your database. Start by adding candidates to your Supabase table.
+                  Post your first job to see the magic happen - AI will automatically analyze and score every application.
                 </p>
                 <Link href="/jobs">
                   <Button className="gap-2" data-testid="button-go-to-jobs">

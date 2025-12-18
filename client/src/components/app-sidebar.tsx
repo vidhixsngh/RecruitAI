@@ -28,13 +28,13 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const mainMenuItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Create Job Forms", url: "/jobs", icon: Briefcase },
-  { title: "Candidates", url: "/candidates", icon: Users },
-  { title: "Hiring Analytics", url: "/hiring-analytics", icon: BarChart3 },
+  { title: "Post Job Forms", url: "/jobs", icon: Briefcase },
+  { title: "AI-Screened Candidates", url: "/candidates", icon: Users },
+  { title: "AI Performance Insights", url: "/hiring-analytics", icon: BarChart3 },
 ];
 
 const actionMenuItems = [
-  { title: "AI Analysis", url: "/analysis", icon: Bot },
+  { title: "Smart Analysis", url: "/analysis", icon: Bot },
   { title: "Manage Interviews", url: "/schedule", icon: Calendar },
   { title: "Manage Potential Candidates", url: "/prescreen", icon: UserCheck },
   { title: "Send Emails", url: "/emails", icon: Mail },

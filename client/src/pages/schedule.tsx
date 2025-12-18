@@ -290,7 +290,7 @@ export default function SchedulePage() {
                 ) : (
                   <div className="text-center py-6">
                     <Calendar className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-                    <p className="text-sm text-muted-foreground">No interviews scheduled yet.</p>
+                    <p className="text-sm text-muted-foreground">AI will help you schedule interviews with top candidates!</p>
                   </div>
                 );
               })()}

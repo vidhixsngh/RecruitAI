@@ -566,9 +566,9 @@ export default function JobsPage() {
           <Card className="text-center py-12">
             <CardContent>
               <Briefcase className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No job openings yet</h3>
+              <h3 className="text-lg font-semibold mb-2">Ready to screen candidates with AI!</h3>
               <p className="text-muted-foreground mb-6">
-                Let's add your first one and start receiving applications.
+                Post your first job to see the magic happen - AI will automatically analyze every application.
               </p>
               <Button
                 onClick={() => setIsAddDialogOpen(true)}
@@ -705,9 +705,9 @@ export default function JobsPage() {
             ) : (
               <div className="text-center py-8">
                 <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No applicants yet</h3>
+                <h3 className="text-lg font-semibold mb-2">AI is ready to screen applicants!</h3>
                 <p className="text-muted-foreground mb-4">
-                  No one has applied for this position yet. Share the application link to start receiving applications.
+                  Share the application link and watch AI automatically analyze each resume as they come in.
                 </p>
                 <div className="flex items-center justify-center gap-2">
                   <Button
