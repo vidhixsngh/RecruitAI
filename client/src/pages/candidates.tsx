@@ -266,22 +266,6 @@ export default function CandidatesPage() {
     return "bg-rose-100";
   };
 
-  // Group candidates by stage for Kanban view - use same filtering as List view
-  const groupedCandidates = React.useMemo(() => {
-    if (!filteredCandidates) return {};
-
-    const groups: { [key: string]: SupabaseCandidate[] } = {};
-    
-    KANBAN_COLUMNS.forEach(column => {
-      groups[column.id] = filteredCandidates.filter(candidate => {
-        const candidateStage = candidate.stage?.toLowerCase() || 'new';
-        return column.status.some(status => candidateStage.includes(status));
-      });
-    });
-
-    return groups;
-  }, [filteredCandidates]);
-
   // SIMPLIFIED ACTION-BASED FILTERING
   const filteredCandidates = React.useMemo(() => {
     if (!supabaseCandidates) return [];
@@ -359,6 +343,22 @@ export default function CandidatesPage() {
       return matchesSearch && matchesAction;
     });
   }, [supabaseCandidates, statusFilter, searchQuery, completedDecisions]);
+
+  // Group candidates by stage for Kanban view - use same filtering as List view
+  const groupedCandidates = React.useMemo(() => {
+    if (!filteredCandidates) return {};
+
+    const groups: { [key: string]: SupabaseCandidate[] } = {};
+    
+    KANBAN_COLUMNS.forEach(column => {
+      groups[column.id] = filteredCandidates.filter(candidate => {
+        const candidateStage = candidate.stage?.toLowerCase() || 'new';
+        return column.status.some(status => candidateStage.includes(status));
+      });
+    });
+
+    return groups;
+  }, [filteredCandidates]);
 
   // Debug logging for completed decisions
   React.useEffect(() => {
