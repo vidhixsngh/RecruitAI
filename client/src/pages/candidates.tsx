@@ -158,17 +158,17 @@ const KANBAN_COLUMNS = [
   {
     id: 'new',
     title: 'New Applications',
-    status: ['new', 'pending', 'applied'],
+    status: ['new', 'pending', 'applied', 'screened', 'reviewed', 'analyzed'],
     color: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50',
     headerColor: 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200',
     count: 0
   },
   {
-    id: 'screened',
-    title: 'AI Screened',
-    status: ['screened', 'reviewed', 'analyzed'],
-    color: 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800/50',
-    headerColor: 'bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200',
+    id: 'on_hold',
+    title: 'On Hold',
+    status: ['hold', 'on_hold', 'weak', 'maybe'],
+    color: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50',
+    headerColor: 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200',
     count: 0
   },
   {
@@ -368,36 +368,46 @@ export default function CandidatesPage() {
     
     KANBAN_COLUMNS.forEach(column => {
       groups[column.id] = filteredCandidates.filter(candidate => {
-        // Handle null/undefined stages - default to 'new' for candidates without stages
-        const candidateStage = candidate.stage?.toLowerCase() || 'new';
+        const candidateStage = candidate.stage?.toLowerCase() || '';
+        const recommendation = candidate.ai_recommendation?.toLowerCase() || '';
         
-        // Special handling for different stages
+        // Special handling for different columns
         let matches = false;
         
         if (column.id === 'new') {
-          // New Applications: null stage, 'new', 'pending', 'applied'
-          matches = !candidate.stage || 
-                   candidate.stage === null || 
-                   column.status.some(status => candidateStage.includes(status));
-        } else if (column.id === 'screened') {
-          // AI Screened: has AI data but no interview scheduled
+          // New Applications: AI analysis completed but no HR action taken
+          // Has AI data (score/recommendation) but no interview scheduled and not on hold
           matches = (candidate.ai_score !== null || candidate.ai_recommendation !== null) &&
                    !candidate.interview_slot &&
-                   column.status.some(status => candidateStage.includes(status));
+                   !recommendation.includes('hold') &&
+                   !recommendation.includes('weak') &&
+                   !candidateStage.includes('hold') &&
+                   !candidateStage.includes('interview_scheduled') &&
+                   !candidateStage.includes('email_sent') &&
+                   !candidateStage.includes('rejected');
+        } else if (column.id === 'on_hold') {
+          // On Hold: Candidates marked as hold/weak/maybe by AI or HR
+          matches = recommendation.includes('hold') ||
+                   recommendation.includes('weak') ||
+                   recommendation.includes('maybe') ||
+                   candidateStage.includes('hold');
         } else if (column.id === 'interview_scheduled') {
           // Interview Scheduled: has interview_slot or specific stage
-          matches = candidate.interview_slot !== null && candidate.interview_slot !== '' ||
-                   column.status.some(status => candidateStage.includes(status));
+          matches = (candidate.interview_slot !== null && candidate.interview_slot !== '') ||
+                   candidateStage.includes('interview_scheduled') ||
+                   candidateStage.includes('prescreen_scheduled');
         } else if (column.id === 'completed') {
-          // Process Complete: email sent or rejected
-          matches = column.status.some(status => candidateStage.includes(status));
+          // Process Complete: email sent, rejected, or hired
+          matches = candidateStage.includes('email_sent') ||
+                   candidateStage.includes('rejected') ||
+                   candidateStage.includes('hired');
         } else {
           // Default matching
           matches = column.status.some(status => candidateStage.includes(status));
         }
         
         if (matches) {
-          console.log(`📋 [${column.title}] Adding: ${candidate.name} (stage: ${candidate.stage || 'null'}, interview_slot: ${candidate.interview_slot || 'null'})`);
+          console.log(`📋 [${column.title}] Adding: ${candidate.name} (stage: ${candidate.stage || 'null'}, recommendation: ${candidate.ai_recommendation || 'null'}, interview_slot: ${candidate.interview_slot || 'null'})`);
         }
         
         return matches;
