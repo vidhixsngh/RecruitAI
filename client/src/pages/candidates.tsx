@@ -368,11 +368,36 @@ export default function CandidatesPage() {
     
     KANBAN_COLUMNS.forEach(column => {
       groups[column.id] = filteredCandidates.filter(candidate => {
+        // Handle null/undefined stages - default to 'new' for candidates without stages
         const candidateStage = candidate.stage?.toLowerCase() || 'new';
-        const matches = column.status.some(status => candidateStage.includes(status));
+        
+        // Special handling for different stages
+        let matches = false;
+        
+        if (column.id === 'new') {
+          // New Applications: null stage, 'new', 'pending', 'applied'
+          matches = !candidate.stage || 
+                   candidate.stage === null || 
+                   column.status.some(status => candidateStage.includes(status));
+        } else if (column.id === 'screened') {
+          // AI Screened: has AI data but no interview scheduled
+          matches = (candidate.ai_score !== null || candidate.ai_recommendation !== null) &&
+                   !candidate.interview_slot &&
+                   column.status.some(status => candidateStage.includes(status));
+        } else if (column.id === 'interview_scheduled') {
+          // Interview Scheduled: has interview_slot or specific stage
+          matches = candidate.interview_slot !== null && candidate.interview_slot !== '' ||
+                   column.status.some(status => candidateStage.includes(status));
+        } else if (column.id === 'completed') {
+          // Process Complete: email sent or rejected
+          matches = column.status.some(status => candidateStage.includes(status));
+        } else {
+          // Default matching
+          matches = column.status.some(status => candidateStage.includes(status));
+        }
         
         if (matches) {
-          console.log(`📋 [${column.title}] Adding: ${candidate.name} (stage: ${candidate.stage})`);
+          console.log(`📋 [${column.title}] Adding: ${candidate.name} (stage: ${candidate.stage || 'null'}, interview_slot: ${candidate.interview_slot || 'null'})`);
         }
         
         return matches;
