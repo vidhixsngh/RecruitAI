@@ -230,6 +230,19 @@ export default function CandidatesPage() {
     staleTime: 30000, // 30 seconds
   });
 
+  // Debug logging for data fetching
+  React.useEffect(() => {
+    console.log('🔍 === CANDIDATES DATA DEBUG ===');
+    console.log('📊 supabaseCandidates:', supabaseCandidates?.length || 0);
+    console.log('⏳ candidatesLoading:', candidatesLoading);
+    console.log('❌ candidatesError:', candidatesError);
+    
+    if (supabaseCandidates && supabaseCandidates.length > 0) {
+      console.log('📋 First candidate:', supabaseCandidates[0]);
+      console.log('📋 All candidate stages:', supabaseCandidates.map(c => `${c.name}: ${c.stage}`));
+    }
+  }, [supabaseCandidates, candidatesLoading, candidatesError]);
+
   // Comment out the old API call - we're now using Supabase
   // const { data: candidates, isLoading: candidatesLoading } = useQuery<Candidate[]>({
   //   queryKey: ["/api/candidates"],
@@ -346,6 +359,9 @@ export default function CandidatesPage() {
 
   // Group candidates by stage for Kanban view - use same filtering as List view
   const groupedCandidates = React.useMemo(() => {
+    console.log('🔄 Kanban: Grouping candidates...');
+    console.log('📊 filteredCandidates:', filteredCandidates?.length || 0);
+    
     if (!filteredCandidates) return {};
 
     const groups: { [key: string]: SupabaseCandidate[] } = {};
@@ -353,10 +369,19 @@ export default function CandidatesPage() {
     KANBAN_COLUMNS.forEach(column => {
       groups[column.id] = filteredCandidates.filter(candidate => {
         const candidateStage = candidate.stage?.toLowerCase() || 'new';
-        return column.status.some(status => candidateStage.includes(status));
+        const matches = column.status.some(status => candidateStage.includes(status));
+        
+        if (matches) {
+          console.log(`📋 [${column.title}] Adding: ${candidate.name} (stage: ${candidate.stage})`);
+        }
+        
+        return matches;
       });
+      
+      console.log(`📊 [${column.title}] Total: ${groups[column.id].length} candidates`);
     });
 
+    console.log('📈 Final groups:', Object.keys(groups).map(key => `${key}: ${groups[key].length}`));
     return groups;
   }, [filteredCandidates]);
 
