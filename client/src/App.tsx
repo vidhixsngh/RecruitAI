@@ -28,11 +28,11 @@ import { AnimatePresence, motion } from "framer-motion";
 
 function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
   const { isAuthenticated } = useAuth();
-  
+
   if (!isAuthenticated) {
     return <Redirect to="/" />;
   }
-  
+
   return <Component />;
 }
 
@@ -52,13 +52,12 @@ function AppLayout({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
           </header>
           <main className="flex-1 overflow-auto">
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               <motion.div
                 key={window.location.pathname}
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: 0.15 }} // Faster transition
               >
                 {children}
               </motion.div>
@@ -76,9 +75,9 @@ function Router() {
   const [oauthTimeout, setOauthTimeout] = React.useState(false);
 
   // Check if we're handling an OAuth callback
-  const isOAuthCallback = window.location.hash.includes('access_token') || 
-                          window.location.search.includes('code=') ||
-                          window.location.hash.includes('error');
+  const isOAuthCallback = window.location.hash.includes('access_token') ||
+    window.location.search.includes('code=') ||
+    window.location.hash.includes('error');
 
   // Add timeout for OAuth callback
   React.useEffect(() => {
@@ -87,12 +86,12 @@ function Router() {
       console.log('📍 Current URL:', window.location.href);
       console.log('🔗 Hash:', window.location.hash);
       console.log('🔗 Search:', window.location.search);
-      
+
       const timer = setTimeout(() => {
         console.log('⏰ OAuth callback timeout - redirecting to login');
         setOauthTimeout(true);
       }, 5000); // 5 second timeout
-      
+
       return () => clearTimeout(timer);
     }
   }, [isOAuthCallback, isAuthenticated]);
